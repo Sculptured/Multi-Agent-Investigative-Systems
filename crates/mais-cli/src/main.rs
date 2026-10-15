@@ -1,6 +1,6 @@
 use clap::{Args, Parser, Subcommand};
 use mais::adapters::{sculptured, team};
-use mais::link::{Selection, assemble, read_logs};
+use mais::link::Selection;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -63,14 +63,7 @@ fn report(i: &Input) -> Result<mais::report::Report, String> {
         None => None,
     };
     let sel = Selection { since_ms: time(&i.since)?, until_ms: time(&i.until)?, sessions: i.session.clone() };
-    let (sessions, skipped) = read_logs(&i.logs);
-    if sessions.is_empty() {
-        return Err("no Claude Code or Codex session logs found there".into());
-    }
-    let team = team.or_else(|| export.as_ref().map(|x| x.team.clone()));
-    let mut run = assemble(sessions, team.as_ref(), export.as_ref(), &sel);
-    run.skipped = skipped;
-    let mut r = mais::analyze::analyze(&run);
+    let mut r = mais::report(&i.logs, team, export.as_ref(), &sel)?;
     if i.redact {
         mais::report::redact(&mut r);
     }
