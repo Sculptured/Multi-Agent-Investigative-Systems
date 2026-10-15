@@ -1,0 +1,951 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Report",
+  "type": "object",
+  "properties": {
+    "agents": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/AgentRow"
+      }
+    },
+    "cost": {
+      "$ref": "#/$defs/Cost"
+    },
+    "costliest": {
+      "description": "What added the most to later calls' context, most first.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/CostlyItem"
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Finding"
+      }
+    },
+    "format": {
+      "description": "Always \"mais.report/v1\".",
+      "type": "string"
+    },
+    "latency": {
+      "$ref": "#/$defs/Latency"
+    },
+    "plan": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PlanSeries"
+      }
+    },
+    "run": {
+      "$ref": "#/$defs/RunSummary"
+    },
+    "shared_reads": {
+      "description": "Commands and files several agents read for themselves.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SharedRead"
+      }
+    },
+    "shared_start": {
+      "$ref": "#/$defs/SharedStart"
+    },
+    "skipped": {
+      "description": "Lines the readers did not know, by file.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0
+      }
+    },
+    "timeline": {
+      "$ref": "#/$defs/Timeline"
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ToolUse"
+      }
+    },
+    "where_tokens_went": {
+      "description": "Every token of the run by cause: the starting context re-read, what grew, and output.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Part"
+      }
+    }
+  },
+  "required": [
+    "format",
+    "run",
+    "agents",
+    "where_tokens_went",
+    "costliest",
+    "shared_reads",
+    "shared_start",
+    "tools",
+    "timeline",
+    "latency",
+    "plan",
+    "cost",
+    "findings",
+    "skipped"
+  ],
+  "$defs": {
+    "AgentRow": {
+      "type": "object",
+      "properties": {
+        "calls": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "cli_cost_usd": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "final_context": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "first_ms": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "group": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "growth_reread": {
+          "description": "What it added while working, re-read on every later call (and summaries after compaction).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "id": {
+          "type": "string"
+        },
+        "last_ms": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model_ms": {
+          "description": "Time in model calls, in tools, and neither (waiting for work, answers or teammates).",
+          "$ref": "#/$defs/Figure2"
+        },
+        "name": {
+          "type": "string"
+        },
+        "parent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "role": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runtime": {
+          "$ref": "#/$defs/Runtime"
+        },
+        "start_reread": {
+          "description": "Its starting context, re-read on every call.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "starting_context": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "tokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "tool_ms": {
+          "$ref": "#/$defs/Figure2"
+        },
+        "usage": {
+          "$ref": "#/$defs/Usage"
+        },
+        "waiting_ms": {
+          "$ref": "#/$defs/Figure2"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "runtime",
+        "calls",
+        "usage",
+        "tokens",
+        "starting_context",
+        "final_context",
+        "start_reread",
+        "growth_reread",
+        "model_ms",
+        "tool_ms",
+        "waiting_ms"
+      ]
+    },
+    "BudgetEvent": {
+      "type": "object",
+      "properties": {
+        "at_ms": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "kind": {
+          "$ref": "#/$defs/BudgetEventKind"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "at_ms",
+        "reason"
+      ]
+    },
+    "BudgetEventKind": {
+      "type": "string",
+      "enum": [
+        "wrap-up",
+        "stop"
+      ]
+    },
+    "Cost": {
+      "type": "object",
+      "properties": {
+        "by_kind": {
+          "description": "Share of the cost by kind of token, at the usual price ratios (an estimate).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CostKind"
+          }
+        },
+        "cli_usd": {
+          "description": "The CLIs' own figures, summed (Claude Code reports one; Codex does not).",
+          "$ref": "#/$defs/Figure3"
+        }
+      },
+      "required": [
+        "cli_usd",
+        "by_kind"
+      ]
+    },
+    "CostKind": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "share": {
+          "type": "number",
+          "format": "double"
+        },
+        "tokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "weight": {
+          "description": "Price relative to fresh input.",
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "kind",
+        "tokens",
+        "weight",
+        "share"
+      ]
+    },
+    "CostlyItem": {
+      "type": "object",
+      "properties": {
+        "agent": {
+          "type": "string"
+        },
+        "cause": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ItemKind"
+        },
+        "reread": {
+          "$ref": "#/$defs/Figure"
+        },
+        "target": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tokens": {
+          "description": "Its own size, and that size times the calls that re-sent it.",
+          "$ref": "#/$defs/Figure"
+        },
+        "tool": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "agent",
+        "kind",
+        "cause",
+        "tokens",
+        "reread"
+      ]
+    },
+    "Durations": {
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "median_ms": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "p90_ms": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "total_ms": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "required": [
+        "count",
+        "total_ms"
+      ]
+    },
+    "Fanout": {
+      "description": "Many agents starting close together.",
+      "type": "object",
+      "properties": {
+        "agents": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "at_ms": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "from": {
+          "description": "The agent that handed them work, where the run export says.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "at_ms",
+        "agents"
+      ]
+    },
+    "Figure": {
+      "description": "A number and where it comes from.",
+      "type": "object",
+      "properties": {
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "value": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "provenance"
+      ]
+    },
+    "Figure2": {
+      "description": "A number and where it comes from.",
+      "type": "object",
+      "properties": {
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "value": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        }
+      },
+      "required": [
+        "provenance"
+      ]
+    },
+    "Figure3": {
+      "description": "A number and where it comes from.",
+      "type": "object",
+      "properties": {
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "value": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        }
+      },
+      "required": [
+        "provenance"
+      ]
+    },
+    "Finding": {
+      "description": "One plain sentence a person can act on, with the section it rests on.",
+      "type": "object",
+      "properties": {
+        "section": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "section"
+      ]
+    },
+    "ItemKind": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "system-prompt",
+            "tool-definitions",
+            "tool-result"
+          ]
+        },
+        {
+          "description": "The person's own CLI setup loaded into the agent: skills list, plugin and MCP instructions,\ndeferred tool names, hook output.",
+          "type": "string",
+          "const": "setup"
+        },
+        {
+          "description": "CLAUDE.md, AGENTS.md, memory files.",
+          "type": "string",
+          "const": "memory"
+        },
+        {
+          "description": "The agent's first message: its job and the team's description.",
+          "type": "string",
+          "const": "job"
+        },
+        {
+          "description": "A later message from a person or a teammate.",
+          "type": "string",
+          "const": "message"
+        },
+        {
+          "description": "The agent's own output, re-sent as history.",
+          "type": "string",
+          "const": "reply"
+        }
+      ]
+    },
+    "Latency": {
+      "type": "object",
+      "properties": {
+        "by_model": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Durations"
+          }
+        },
+        "model": {
+          "description": "Model calls whose start and end the logs give.",
+          "$ref": "#/$defs/Durations"
+        },
+        "model_share": {
+          "description": "Shares of the agents' active time: in model calls, in tools, waiting.",
+          "$ref": "#/$defs/Figure3"
+        },
+        "tool_share": {
+          "$ref": "#/$defs/Figure3"
+        },
+        "tools": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Durations"
+          }
+        },
+        "waiting_share": {
+          "$ref": "#/$defs/Figure3"
+        }
+      },
+      "required": [
+        "model",
+        "by_model",
+        "tools",
+        "model_share",
+        "tool_share",
+        "waiting_share"
+      ]
+    },
+    "Part": {
+      "description": "One cause, in tokens.",
+      "type": "object",
+      "properties": {
+        "group": {
+          "description": "`start`, `growth` or `output`.",
+          "type": "string"
+        },
+        "part": {
+          "type": "string"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "tokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "group",
+        "part",
+        "tokens",
+        "provenance"
+      ]
+    },
+    "PlanSeries": {
+      "type": "object",
+      "properties": {
+        "added": {
+          "description": "Percentage points the run added: highest minus first (across a reset, the sum of both windows').",
+          "$ref": "#/$defs/Figure3"
+        },
+        "budget": {
+          "description": "The run budget's (soft, hard) for this window, as points the run may add.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number",
+              "format": "double"
+            },
+            {
+              "type": "number",
+              "format": "double"
+            }
+          ]
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/BudgetEvent"
+          }
+        },
+        "first": {
+          "type": "number",
+          "format": "double"
+        },
+        "highest": {
+          "type": "number",
+          "format": "double"
+        },
+        "points": {
+          "description": "(time, reading, highest reading so far in this window).",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "type": "integer",
+                "format": "int64"
+              },
+              {
+                "type": "number",
+                "format": "double"
+              },
+              {
+                "type": "number",
+                "format": "double"
+              }
+            ]
+          }
+        },
+        "points_per_million": {
+          "description": "Points per million tokens of this provider's agents.",
+          "$ref": "#/$defs/Figure3"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "window": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "window",
+        "points",
+        "first",
+        "highest",
+        "added",
+        "points_per_million",
+        "events"
+      ]
+    },
+    "Provenance": {
+      "description": "Where a number comes from.",
+      "oneOf": [
+        {
+          "description": "A CLI or the orchestrator reported it.",
+          "type": "string",
+          "const": "measured"
+        },
+        {
+          "description": "Arithmetic on measured numbers.",
+          "type": "string",
+          "const": "derived"
+        },
+        {
+          "description": "A split by share of characters, a price from a table, or another approximation.",
+          "type": "string",
+          "const": "estimated"
+        },
+        {
+          "description": "Not known; shown as unknown, never as zero.",
+          "type": "string",
+          "const": "unknown"
+        }
+      ]
+    },
+    "RunSummary": {
+      "type": "object",
+      "properties": {
+        "agents": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "calls": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "ended_ms": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "most_working": {
+          "description": "The most agents making calls in one interval of the timeline.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "started_ms": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "starting_context": {
+          "description": "The median agent's first-call context.",
+          "$ref": "#/$defs/Figure"
+        },
+        "tokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "usage": {
+          "$ref": "#/$defs/Usage"
+        }
+      },
+      "required": [
+        "agents",
+        "calls",
+        "usage",
+        "tokens",
+        "most_working",
+        "models",
+        "starting_context"
+      ]
+    },
+    "Runtime": {
+      "type": "string",
+      "enum": [
+        "claude-code",
+        "codex"
+      ]
+    },
+    "SharedPart": {
+      "type": "object",
+      "properties": {
+        "agents": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "kind": {
+          "$ref": "#/$defs/ItemKind"
+        },
+        "label": {
+          "type": "string"
+        },
+        "tokens": {
+          "$ref": "#/$defs/Figure"
+        }
+      },
+      "required": [
+        "kind",
+        "label",
+        "agents",
+        "tokens"
+      ]
+    },
+    "SharedRead": {
+      "type": "object",
+      "properties": {
+        "agents": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "reread": {
+          "$ref": "#/$defs/Figure"
+        },
+        "target": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "target",
+        "agents",
+        "reread"
+      ]
+    },
+    "SharedStart": {
+      "description": "The parts of the starting context that were identical across agents, which a provider's prompt\ncache could hold once for all of them if they came first and in the same order.",
+      "type": "object",
+      "properties": {
+        "agents": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "first_call_cache_writes": {
+          "description": "What the agents wrote to the cache on their first calls, together.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "identical_per_agent": {
+          "description": "Tokens of each agent's start that were identical in every agent that had them.",
+          "$ref": "#/$defs/Figure"
+        },
+        "parts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SharedPart"
+          }
+        },
+        "writes_avoidable": {
+          "description": "Cache writes that would have been reads had the identical part been written once.",
+          "$ref": "#/$defs/Figure"
+        }
+      },
+      "required": [
+        "agents",
+        "parts",
+        "identical_per_agent",
+        "first_call_cache_writes",
+        "writes_avoidable"
+      ]
+    },
+    "TimePoint": {
+      "type": "object",
+      "properties": {
+        "agents_working": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "at_ms": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "tokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "at_ms",
+        "tokens",
+        "agents_working"
+      ]
+    },
+    "Timeline": {
+      "type": "object",
+      "properties": {
+        "fanouts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Fanout"
+          }
+        },
+        "interval_ms": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "points": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TimePoint"
+          }
+        }
+      },
+      "required": [
+        "interval_ms",
+        "points",
+        "fanouts"
+      ]
+    },
+    "ToolUse": {
+      "type": "object",
+      "properties": {
+        "agents_given": {
+          "description": "Agents it was given to, and the calls of those agents that re-sent its definition.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "calls": {
+          "description": "Times it was called.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "definition_reread": {
+          "$ref": "#/$defs/Figure"
+        },
+        "definition_tokens": {
+          "$ref": "#/$defs/Figure"
+        },
+        "tool": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool",
+        "agents_given",
+        "definition_tokens",
+        "definition_reread",
+        "calls"
+      ]
+    },
+    "Usage": {
+      "description": "Tokens of one model call or a sum of calls. `input` is fresh input only: cache reads and\nwrites are counted apart, as Claude Code reports them.",
+      "type": "object",
+      "properties": {
+        "cache_read": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "cache_write": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "input": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "output": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "input",
+        "cache_read",
+        "cache_write",
+        "output"
+      ]
+    }
+  }
+}
