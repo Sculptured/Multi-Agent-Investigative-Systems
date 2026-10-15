@@ -22,7 +22,10 @@ fn the_start_tools_and_job_are_found() {
     assert_eq!(start, [ItemKind::SystemPrompt, ItemKind::SystemPrompt, ItemKind::SystemPrompt, ItemKind::Job]);
     assert!(s.first_message.contains("Your role: Reviewer 8 [rev8]"));
     let r: Vec<_> = s.items.iter().filter(|i| i.kind == ItemKind::ToolResult).collect();
-    assert_eq!((r[0].first_call, r[0].chars, r[0].tool.as_deref(), r[0].target.as_deref()), (1, 5000, Some("exec"), Some("sed -n 1,400p src/build.py")));
+    assert_eq!(
+        (r[0].first_call, r[0].chars, r[0].tool.as_deref(), r[0].target.as_deref()),
+        (1, 5000, Some("exec"), Some("sed -n 1,400p src/build.py"))
+    );
     assert_eq!(r[1].tool.as_deref(), Some("team_status"));
 }
 
@@ -39,7 +42,11 @@ fn plan_readings_compaction_and_unknown_lines() {
 #[test]
 fn a_response_starts_at_the_latest_input_and_a_tool_runs_from_call_to_output() {
     let s = fixture();
-    assert_eq!(s.calls[0].ended_ms.zip(s.calls[0].started_ms).map(|(e, b)| e - b), Some(120_000), "the job at 22:10, the answer at 22:12");
+    assert_eq!(
+        s.calls[0].ended_ms.zip(s.calls[0].started_ms).map(|(e, b)| e - b),
+        Some(120_000),
+        "the job at 22:10, the answer at 22:12"
+    );
     let r = s.items.iter().find(|i| i.tool.as_deref() == Some("exec")).unwrap();
     assert_eq!(r.took_ms, Some(60_000));
 }

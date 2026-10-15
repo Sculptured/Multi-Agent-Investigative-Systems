@@ -4,8 +4,9 @@ description = "Where a multi-agent run's tokens and context went: readers for ag
 edition.workspace = true
 version.workspace = true
 license.workspace = true
+repository.workspace = true
 rust-version.workspace = true
-readme = "README.md"
+readme = "../../README.md"
 keywords = ["multi-agent", "agents", "tokens", "observability", "claude-code"]
 categories = ["development-tools", "command-line-utilities"]
 

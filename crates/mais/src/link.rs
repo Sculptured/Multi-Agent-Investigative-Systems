@@ -2,7 +2,7 @@
 //! each session becomes a team member where that can be told, else an agent of its own.
 use crate::adapters::sculptured::RunExport;
 use crate::adapters::team::Team;
-use crate::adapters::{claude, codex, Session};
+use crate::adapters::{Session, claude, codex};
 use crate::model::{Agent, Run};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -53,7 +53,11 @@ fn files(p: &Path) -> Vec<PathBuf> {
 
 fn is_codex(f: &Path) -> bool {
     use std::io::BufRead;
-    let first = std::fs::File::open(f).ok().and_then(|h| std::io::BufReader::new(h).lines().next()).and_then(Result::ok).unwrap_or_default();
+    let first = std::fs::File::open(f)
+        .ok()
+        .and_then(|h| std::io::BufReader::new(h).lines().next())
+        .and_then(Result::ok)
+        .unwrap_or_default();
     first.contains("\"session_meta\"")
 }
 
@@ -104,9 +108,13 @@ fn member_of(s: &Session, export: Option<&RunExport>) -> Option<(String, Option<
 pub fn assemble(sessions: Vec<Session>, team: Option<&Team>, export: Option<&RunExport>, sel: &Selection) -> Run {
     let (from, to) = window(&sessions, sel, export);
     let keep = |s: &Session| s.calls.iter().any(|c| c.at_ms >= from && c.at_ms <= to);
-    let wanted = |s: &Session| sel.sessions.is_empty() || s.agent.as_ref().is_some_and(|a| sel.sessions.iter().any(|p| a.session.starts_with(p)));
+    let wanted = |s: &Session| {
+        sel.sessions.is_empty()
+            || s.agent.as_ref().is_some_and(|a| sel.sessions.iter().any(|p| a.session.starts_with(p)))
+    };
     let sessions: Vec<Session> = sessions.into_iter().filter(|s| keep(s) && wanted(s)).collect();
-    let found: BTreeMap<String, (String, Option<String>)> = sessions.iter().filter_map(|s| Some((s.agent.as_ref()?.id.clone(), member_of(s, export)?))).collect();
+    let found: BTreeMap<String, (String, Option<String>)> =
+        sessions.iter().filter_map(|s| Some((s.agent.as_ref()?.id.clone(), member_of(s, export)?))).collect();
     let rename: BTreeMap<String, String> = found.iter().map(|(k, (m, _))| (k.clone(), m.clone())).collect();
     let names: BTreeMap<String, String> = found.into_values().filter_map(|(m, n)| Some((m, n?))).collect();
     let id_of = |old: &str| -> String {
@@ -133,15 +141,41 @@ pub fn assemble(sessions: Vec<Session>, team: Option<&Team>, export: Option<&Run
 fn add(run: &mut Run, s: Session, id_of: &dyn Fn(&str) -> String, team: Option<&Team>, (from, to): (i64, i64)) {
     let Some(a) = s.agent else { return };
     let id = id_of(&a.id);
-    let member = team.and_then(|t| t.member(&id));
-    run.agents.push(Agent { name: member.map_or(a.name.clone(), |m| m.name.clone()), group: member.and_then(|m| m.group.clone()), parent: a.parent.as_deref().map(id_of), id: id.clone(), ..a });
+    run.agents.push(named(a, &id, id_of, team));
     let kept: Vec<u32> = s.calls.iter().filter(|c| c.at_ms >= from && c.at_ms <= to).map(|c| c.seq).collect();
     let (lo, hi) = (kept.first().copied().unwrap_or(0), kept.last().copied().unwrap_or(0));
-    run.calls.extend(s.calls.into_iter().filter(|c| c.seq >= lo && c.seq <= hi).map(|c| crate::model::Call { agent: id.clone(), ..c }));
-    run.items.extend(s.items.into_iter().filter(|i| i.first_call <= hi).map(|i| crate::model::ContextItem { agent: id.clone(), ..i }));
+    run.calls.extend(
+        s.calls
+            .into_iter()
+            .filter(|c| c.seq >= lo && c.seq <= hi)
+            .map(|c| crate::model::Call { agent: id.clone(), ..c }),
+    );
+    run.items.extend(
+        s.items
+            .into_iter()
+            .filter(|i| i.first_call <= hi)
+            .map(|i| crate::model::ContextItem { agent: id.clone(), ..i }),
+    );
     run.compactions.extend(s.compactions.into_iter().map(|c| (id.clone(), c)));
     run.tools.extend(s.tools.into_iter().map(|t| crate::model::ToolDef { agent: id.clone(), ..t }));
-    run.readings.extend(s.readings.into_iter().filter(|r| r.at_ms >= from && r.at_ms <= to).map(|r| crate::model::PlanReading { reporter: Some(id.clone()), ..r }));
+    run.readings.extend(
+        s.readings
+            .into_iter()
+            .filter(|r| r.at_ms >= from && r.at_ms <= to)
+            .map(|r| crate::model::PlanReading { reporter: Some(id.clone()), ..r }),
+    );
+}
+
+/// The session's agent under its run id, named and grouped by the team.
+fn named(a: Agent, id: &str, id_of: &dyn Fn(&str) -> String, team: Option<&Team>) -> Agent {
+    let member = team.and_then(|t| t.member(id));
+    Agent {
+        name: member.map_or(a.name.clone(), |m| m.name.clone()),
+        group: member.and_then(|m| m.group.clone()),
+        parent: a.parent.as_deref().map(id_of),
+        id: id.to_string(),
+        ..a
+    }
 }
 
 fn finish(run: &mut Run, team: Option<&Team>, export: Option<&RunExport>) {

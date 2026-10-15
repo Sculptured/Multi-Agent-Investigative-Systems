@@ -1,5 +1,5 @@
 use mais::adapters::{sculptured, team};
-use mais::link::{assemble, read_logs, Selection};
+use mais::link::{Selection, assemble, read_logs};
 use mais::model::*;
 use std::path::PathBuf;
 
@@ -42,5 +42,8 @@ fn a_run_export_links_sessions_and_brings_plan_readings_and_handoffs() {
 fn the_newest_run_is_picked_when_nothing_says_which() {
     let (sessions, _) = read_logs(&[fx("claude/proj"), fx("codex")]);
     let run = assemble(sessions, None, None, &Selection::default());
-    assert!(run.agents.iter().all(|a| a.runtime == Runtime::ClaudeCode), "the Codex fixture is a day older: another run");
+    assert!(
+        run.agents.iter().all(|a| a.runtime == Runtime::ClaudeCode),
+        "the Codex fixture is a day older: another run"
+    );
 }

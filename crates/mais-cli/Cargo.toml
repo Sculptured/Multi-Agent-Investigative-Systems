@@ -4,6 +4,7 @@ description = "The mais command: report where a multi-agent run's tokens and con
 edition.workspace = true
 version.workspace = true
 license.workspace = true
+repository.workspace = true
 rust-version.workspace = true
 
 [[bin]]

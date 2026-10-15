@@ -1,8 +1,12 @@
-//! Prints what the Claude Code reader finds in a session file: `cargo run --example claude_dump -- <file>`.
+//! Prints what a reader finds in one session file: `cargo run --example dump -- <file>`.
 fn main() {
     let path = std::env::args().nth(1).expect("a session file");
     let p = std::path::Path::new(&path);
-    let sessions = if path.contains("/.codex/") { vec![mais::adapters::codex::read(p).expect("readable")] } else { mais::adapters::claude::read(p).expect("readable") };
+    let sessions = if path.contains("/.codex/") {
+        vec![mais::adapters::codex::read(p).expect("readable")]
+    } else {
+        mais::adapters::claude::read(p).expect("readable")
+    };
     for s in sessions {
         let a = s.agent.as_ref().unwrap();
         let total: u64 = s.calls.iter().map(|c| c.usage.total()).sum();
@@ -12,6 +16,15 @@ fn main() {
         }
         let u: mais::model::Usage = s.calls.iter().map(|c| c.usage).sum();
         println!("{:?} readings={}", u, s.readings.len());
-        println!("{} calls={} total={} skipped={} compactions={:?} start_chars={:?} cost={:?}", a.id, s.calls.len(), total, s.skipped, s.compactions, kinds, a.cli_cost_usd);
+        println!(
+            "{} calls={} total={} skipped={} compactions={:?} start_chars={:?} cost={:?}",
+            a.id,
+            s.calls.len(),
+            total,
+            s.skipped,
+            s.compactions,
+            kinds,
+            a.cli_cost_usd
+        );
     }
 }

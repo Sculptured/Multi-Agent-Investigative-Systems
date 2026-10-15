@@ -22,18 +22,30 @@ fn the_starting_context_is_split_into_what_it_holds() {
     let start: Vec<(ItemKind, u64)> = s.items.iter().filter(|i| i.first_call == 0).map(|i| (i.kind, i.chars)).collect();
     assert!(start.contains(&(ItemKind::Setup, 1000)), "the skills list: {start:?}");
     assert!(start.contains(&(ItemKind::Memory, 300)));
-    assert!(start.iter().any(|(k, _)| *k == ItemKind::SystemPrompt) && start.iter().any(|(k, _)| *k == ItemKind::ToolDefinitions));
+    assert!(
+        start.iter().any(|(k, _)| *k == ItemKind::SystemPrompt)
+            && start.iter().any(|(k, _)| *k == ItemKind::ToolDefinitions)
+    );
     assert!(start.iter().any(|(k, c)| *k == ItemKind::Job && *c > 200));
     assert!(s.first_message.contains("Your role: Developer 8 [dev8]"));
-    assert!(s.items.iter().all(|i| i.tokens.provenance == Provenance::Unknown), "sizes in tokens come from the analyses");
+    assert!(
+        s.items.iter().all(|i| i.tokens.provenance == Provenance::Unknown),
+        "sizes in tokens come from the analyses"
+    );
 }
 
 #[test]
 fn tool_results_name_their_tool_and_target_and_a_stored_output_counts_its_preview() {
     let s = &fixture()[0];
     let r: Vec<_> = s.items.iter().filter(|i| i.kind == ItemKind::ToolResult).collect();
-    assert_eq!((r[0].first_call, r[0].chars, r[0].tool.as_deref(), r[0].target.as_deref()), (1, 3000, Some("Bash"), Some("cat src/build.py")));
-    assert_eq!((r[1].first_call, r[1].tool.as_deref(), r[1].target.as_deref()), (2, Some("read_pdf"), Some("manual.pdf")));
+    assert_eq!(
+        (r[0].first_call, r[0].chars, r[0].tool.as_deref(), r[0].target.as_deref()),
+        (1, 3000, Some("Bash"), Some("cat src/build.py"))
+    );
+    assert_eq!(
+        (r[1].first_call, r[1].tool.as_deref(), r[1].target.as_deref()),
+        (2, Some("read_pdf"), Some("manual.pdf"))
+    );
     assert!(r[1].chars < 2300, "the model saw the 2 KB preview, not the 38.7 KB file: {}", r[1].chars);
     assert!(s.items.iter().any(|i| i.kind == ItemKind::Reply && i.first_call == 1), "its own reply is re-sent");
 }
@@ -58,7 +70,11 @@ fn a_subagent_is_its_own_agent_under_its_parent() {
 fn a_call_knows_when_its_request_went_out_and_a_tool_how_long_it_ran() {
     let s = &fixture()[0];
     let c = &s.calls[0];
-    assert_eq!(c.ended_ms.zip(c.started_ms).map(|(e, b)| e - b), Some(30_000), "request at :30, answer at the next minute");
+    assert_eq!(
+        c.ended_ms.zip(c.started_ms).map(|(e, b)| e - b),
+        Some(30_000),
+        "request at :30, answer at the next minute"
+    );
     assert_eq!(s.calls[1].started_ms, None, "no request line: unknown, not zero");
     let r = s.items.iter().find(|i| i.kind == ItemKind::ToolResult).unwrap();
     assert_eq!(r.took_ms, Some(0));

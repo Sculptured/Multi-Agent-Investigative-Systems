@@ -14,7 +14,9 @@ fn interval(span_ms: i64) -> i64 {
 }
 
 pub fn timeline(run: &Run) -> Timeline {
-    let Some(start) = run.calls.iter().map(|c| c.at_ms).min() else { return Timeline { interval_ms: 10_000, points: vec![], fanouts: vec![] } };
+    let Some(start) = run.calls.iter().map(|c| c.at_ms).min() else {
+        return Timeline { interval_ms: 10_000, points: vec![], fanouts: vec![] };
+    };
     let end = run.calls.iter().map(|c| c.at_ms).max().unwrap_or(start);
     let step = interval(end - start);
     let mut buckets: BTreeMap<i64, (u64, BTreeSet<&str>)> = BTreeMap::new();
@@ -23,18 +25,23 @@ pub fn timeline(run: &Run) -> Timeline {
         b.0 += c.usage.total();
         b.1.insert(&c.agent);
     }
-    let points = buckets.into_iter().map(|(at_ms, (tokens, a))| TimePoint { at_ms, tokens, agents_working: a.len() as u32 }).collect();
+    let points = buckets
+        .into_iter()
+        .map(|(at_ms, (tokens, a))| TimePoint { at_ms, tokens, agents_working: a.len() as u32 })
+        .collect();
     Timeline { interval_ms: step, points, fanouts: fanouts(run) }
 }
 
 /// Groups of agents whose first calls came close together.
 fn fanouts(run: &Run) -> Vec<Fanout> {
-    let mut firsts: Vec<(i64, &str)> = run.agents.iter().filter_map(|a| Some((run.calls_of(&a.id).map(|c| c.at_ms).min()?, a.id.as_str()))).collect();
+    let mut firsts: Vec<(i64, &str)> =
+        run.agents.iter().filter_map(|a| Some((run.calls_of(&a.id).map(|c| c.at_ms).min()?, a.id.as_str()))).collect();
     firsts.sort();
     let mut out = Vec::new();
     let mut i = 0;
     while i < firsts.len() {
-        let group: Vec<&(i64, &str)> = firsts[i..].iter().take_while(|(t, _)| *t - firsts[i].0 <= FANOUT_WINDOW_MS).collect();
+        let group: Vec<&(i64, &str)> =
+            firsts[i..].iter().take_while(|(t, _)| *t - firsts[i].0 <= FANOUT_WINDOW_MS).collect();
         if group.len() >= FANOUT_AGENTS {
             out.push(Fanout { at_ms: firsts[i].0, agents: group.len() as u32, from: handed_by(run, &group) });
             i += group.len();
@@ -49,7 +56,9 @@ fn fanouts(run: &Run) -> Vec<Fanout> {
 fn handed_by(run: &Run, group: &[&(i64, &str)]) -> Option<AgentId> {
     let ids: BTreeSet<&str> = group.iter().map(|(_, a)| *a).collect();
     let mut count: BTreeMap<&str, usize> = BTreeMap::new();
-    for e in run.edges.iter().filter(|e| e.kind == EdgeKind::HandsWorkTo && e.at_ms.is_some() && ids.contains(e.to.as_str())) {
+    for e in
+        run.edges.iter().filter(|e| e.kind == EdgeKind::HandsWorkTo && e.at_ms.is_some() && ids.contains(e.to.as_str()))
+    {
         *count.entry(&e.from).or_default() += 1;
     }
     count.into_iter().max_by_key(|(_, n)| *n).map(|(a, _)| a.to_string())
@@ -75,20 +84,33 @@ fn call_ms(c: &crate::model::Call) -> Option<i64> {
 }
 
 pub fn agent_times(run: &Run) -> AgentTimes {
-    run.agents.iter().map(|a| {
-        let calls: Vec<_> = run.calls_of(&a.id).collect();
-        let timed: Vec<i64> = calls.iter().filter_map(|c| call_ms(c)).collect();
-        let model = (timed.len() == calls.len() && !calls.is_empty()).then(|| timed.iter().sum::<i64>());
-        let tools: i64 = run.items.iter().filter(|i| i.agent == a.id && i.kind == ItemKind::ToolResult).filter_map(|i| i.took_ms).sum();
-        let span = calls.iter().map(|c| c.ended_ms.unwrap_or(c.at_ms)).max().zip(calls.iter().map(|c| c.started_ms.unwrap_or(c.at_ms)).min()).map(|(e, s)| e - s);
-        let waiting = model.zip(span).map(|(m, s)| (s - m - tools).max(0));
-        let t = Times {
-            model: model.map_or(Figure::unknown(), Figure::measured),
-            tools: Figure::derived(tools),
-            waiting: waiting.map_or(Figure::unknown(), Figure::derived),
-        };
-        (a.id.clone(), t)
-    }).collect()
+    run.agents
+        .iter()
+        .map(|a| {
+            let calls: Vec<_> = run.calls_of(&a.id).collect();
+            let timed: Vec<i64> = calls.iter().filter_map(|c| call_ms(c)).collect();
+            let model = (timed.len() == calls.len() && !calls.is_empty()).then(|| timed.iter().sum::<i64>());
+            let tools: i64 = run
+                .items
+                .iter()
+                .filter(|i| i.agent == a.id && i.kind == ItemKind::ToolResult)
+                .filter_map(|i| i.took_ms)
+                .sum();
+            let span = calls
+                .iter()
+                .map(|c| c.ended_ms.unwrap_or(c.at_ms))
+                .max()
+                .zip(calls.iter().map(|c| c.started_ms.unwrap_or(c.at_ms)).min())
+                .map(|(e, s)| e - s);
+            let waiting = model.zip(span).map(|(m, s)| (s - m - tools).max(0));
+            let t = Times {
+                model: model.map_or(Figure::unknown(), Figure::measured),
+                tools: Figure::derived(tools),
+                waiting: waiting.map_or(Figure::unknown(), Figure::derived),
+            };
+            (a.id.clone(), t)
+        })
+        .collect()
 }
 
 pub fn latency(run: &Run, times: &AgentTimes) -> Latency {
@@ -113,6 +135,8 @@ pub fn latency(run: &Run, times: &AgentTimes) -> Latency {
         model,
         by_model: by_model.into_iter().map(|(k, v)| (k, durations(v))).collect(),
         tools: tools.into_iter().map(|(k, v)| (k, durations(v))).collect(),
-        model_share: share(m), tool_share: share(t), waiting_share: share(w),
+        model_share: share(m),
+        tool_share: share(t),
+        waiting_share: share(w),
     }
 }

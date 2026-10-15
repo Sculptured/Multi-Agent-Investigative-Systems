@@ -28,11 +28,30 @@ pub struct Session {
 pub(crate) struct Pending(Vec<ContextItem>);
 
 impl Pending {
-    pub(crate) fn add(&mut self, agent: &str, kind: ItemKind, chars: usize, label: &str, tool: Option<String>, target: Option<String>) {
+    pub(crate) fn add(
+        &mut self,
+        agent: &str,
+        kind: ItemKind,
+        chars: usize,
+        label: &str,
+        tool: Option<String>,
+        target: Option<String>,
+    ) {
         if chars == 0 {
             return;
         }
-        self.0.push(ContextItem { agent: agent.to_string(), first_call: 0, kind, chars: chars as u64, tokens: crate::model::Figure::unknown(), label: label.to_string(), tool, target, fingerprint: None, took_ms: None });
+        self.0.push(ContextItem {
+            agent: agent.to_string(),
+            first_call: 0,
+            kind,
+            chars: chars as u64,
+            tokens: crate::model::Figure::unknown(),
+            label: label.to_string(),
+            tool,
+            target,
+            fingerprint: None,
+            took_ms: None,
+        });
     }
 
     /// Sets how long the latest item's tool ran.
@@ -76,5 +95,8 @@ pub fn ms(ts: &str) -> Option<i64> {
 
 /// The text a tool was run on: a shell command, a file, a pattern or a query.
 pub(crate) fn target_of(input: &serde_json::Value) -> Option<String> {
-    ["command", "cmd", "file_path", "path", "pattern", "query", "url"].iter().find_map(|k| input[*k].as_str()).map(|s| s.chars().take(400).collect())
+    ["command", "cmd", "file_path", "path", "pattern", "query", "url"]
+        .iter()
+        .find_map(|k| input[*k].as_str())
+        .map(|s| s.chars().take(400).collect())
 }

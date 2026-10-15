@@ -54,7 +54,8 @@ fn agent(run: &Run, id: &str) -> Vec<Sized> {
     let items: Vec<&ContextItem> = run.items.iter().filter(|i| i.agent == id).collect();
     let mut out = Vec::new();
     for (k, seq) in seqs.iter().enumerate() {
-        let here: Vec<&ContextItem> = items.iter().copied().filter(|i| i.first_call == *seq || (k == 0 && i.first_call < first.seq)).collect();
+        let here: Vec<&ContextItem> =
+            items.iter().copied().filter(|i| i.first_call == *seq || (k == 0 && i.first_call < first.seq)).collect();
         if k == 0 {
             out.extend(split(here, ctx[0], Provenance::Estimated));
         } else if compactions.contains(seq) {
@@ -81,18 +82,44 @@ fn split(items: Vec<&ContextItem>, total: u64, provenance: Provenance) -> Vec<Si
     if chars == 0 {
         return vec![];
     }
-    items.into_iter().map(|i| Sized {
-        agent: i.agent.clone(), kind: i.kind, label: i.label.clone(), tool: i.tool.clone(), target: i.target.clone(), first_call: i.first_call,
-        tokens: (total as f64 * i.chars as f64 / chars as f64).round() as u64, provenance, sent: 0, fingerprint: i.fingerprint,
-    }).collect()
+    items
+        .into_iter()
+        .map(|i| Sized {
+            agent: i.agent.clone(),
+            kind: i.kind,
+            label: i.label.clone(),
+            tool: i.tool.clone(),
+            target: i.target.clone(),
+            first_call: i.first_call,
+            tokens: (total as f64 * i.chars as f64 / chars as f64).round() as u64,
+            provenance,
+            sent: 0,
+            fingerprint: i.fingerprint,
+        })
+        .collect()
 }
 
 fn synthetic(agent: &str, seq: u32, label: &str, tokens: u64) -> Sized {
-    Sized { agent: agent.into(), kind: ItemKind::Message, label: label.into(), tool: None, target: None, first_call: seq, tokens, provenance: Provenance::Derived, sent: 0, fingerprint: None }
+    Sized {
+        agent: agent.into(),
+        kind: ItemKind::Message,
+        label: label.into(),
+        tool: None,
+        target: None,
+        first_call: seq,
+        tokens,
+        provenance: Provenance::Derived,
+        sent: 0,
+        fingerprint: None,
+    }
 }
 
 /// Calls from the item's first until the next compaction (the persistent start: until the end).
 fn sent(s: &Sized, seqs: &[u32], compactions: &[u32]) -> u32 {
-    let end = if s.persistent() { u32::MAX } else { compactions.iter().copied().filter(|c| *c > s.first_call).min().unwrap_or(u32::MAX) };
+    let end = if s.persistent() {
+        u32::MAX
+    } else {
+        compactions.iter().copied().filter(|c| *c > s.first_call).min().unwrap_or(u32::MAX)
+    };
     seqs.iter().filter(|q| **q >= s.first_call && **q < end).count() as u32
 }

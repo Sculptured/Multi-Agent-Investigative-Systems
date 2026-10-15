@@ -2,7 +2,7 @@
 //! recorded, ties every model call to its agent and that agent's place in the team, and explains
 //! where the run's tokens and context went.
 pub mod adapters;
+pub mod analyze;
 pub mod link;
 pub mod model;
 pub mod report;
-pub mod analyze;

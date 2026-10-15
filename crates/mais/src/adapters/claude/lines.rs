@@ -1,5 +1,5 @@
 //! One Claude Code log file, line by line.
-use crate::adapters::{ms, target_of, Pending, Session};
+use crate::adapters::{Pending, Session, ms, target_of};
 use crate::model::{Agent, Call, ItemKind, Runtime, Usage};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -7,7 +7,18 @@ use std::io::BufRead;
 use std::path::Path;
 
 /// Line kinds that carry nothing MAIS needs.
-const QUIET: &[&str] = &["queue-operation", "last-prompt", "atis-latch", "api-request-blob", "summary", "file-history-snapshot", "custom-title", "agent-name", "permission-mode", "pr-link"];
+const QUIET: &[&str] = &[
+    "queue-operation",
+    "last-prompt",
+    "atis-latch",
+    "api-request-blob",
+    "summary",
+    "file-history-snapshot",
+    "custom-title",
+    "agent-name",
+    "permission-mode",
+    "pr-link",
+];
 
 #[derive(Default)]
 struct State {
@@ -38,7 +49,17 @@ pub fn read(file: &Path, id: &str) -> std::io::Result<Session> {
             Err(_) => st.s.skipped += 1,
         }
     }
-    st.s.agent = Some(Agent { id: st.id.clone(), name: st.id.clone(), group: None, role: None, runtime: Runtime::ClaudeCode, session: st.id.clone(), parent: None, folder: st.folder.clone(), cli_cost_usd: st.cost });
+    st.s.agent = Some(Agent {
+        id: st.id.clone(),
+        name: st.id.clone(),
+        group: None,
+        role: None,
+        runtime: Runtime::ClaudeCode,
+        session: st.id.clone(),
+        parent: None,
+        folder: st.folder.clone(),
+        cli_cost_usd: st.cost,
+    });
     Ok(st.s)
 }
 
@@ -69,7 +90,12 @@ impl State {
         let Some(mid) = m["id"].as_str() else { return };
         let u = &m["usage"];
         let n = |k: &str| u[k].as_u64().unwrap_or(0);
-        let usage = Usage { input: n("input_tokens"), cache_read: n("cache_read_input_tokens"), cache_write: n("cache_creation_input_tokens"), output: n("output_tokens") };
+        let usage = Usage {
+            input: n("input_tokens"),
+            cache_read: n("cache_read_input_tokens"),
+            cache_write: n("cache_creation_input_tokens"),
+            output: n("output_tokens"),
+        };
         let at = v["timestamp"].as_str().and_then(ms).unwrap_or(0);
         let idx = match self.calls.get(mid) {
             Some(&i) => i,
@@ -92,7 +118,15 @@ impl State {
         self.pending.add(&self.id.clone(), ItemKind::Reply, chars, "its own reply", None, None);
         self.pending.settle(seq, &mut self.s.items);
         let started = self.request_ms.take();
-        self.s.calls.push(Call { agent: self.id.clone(), seq, at_ms: at, model: model.map(String::from), usage: Usage::default(), started_ms: started, ended_ms: Some(at) });
+        self.s.calls.push(Call {
+            agent: self.id.clone(),
+            seq,
+            at_ms: at,
+            model: model.map(String::from),
+            usage: Usage::default(),
+            started_ms: started,
+            ended_ms: Some(at),
+        });
         self.calls.insert(mid.to_string(), seq as usize);
         seq as usize
     }
@@ -123,7 +157,11 @@ impl State {
     fn tool_result(&mut self, b: &Value) {
         let content = &b["content"];
         let chars = content.as_str().map_or_else(|| content_chars(content), str::len);
-        let (tool, target, asked) = self.tools.get(b["tool_use_id"].as_str().unwrap_or_default()).cloned().unwrap_or(("?".into(), None, self.now));
+        let (tool, target, asked) = self.tools.get(b["tool_use_id"].as_str().unwrap_or_default()).cloned().unwrap_or((
+            "?".into(),
+            None,
+            self.now,
+        ));
         let label = if content.to_string().contains("\"type\":\"image\"") { "image" } else { "result" };
         self.pending.add(&self.id.clone(), ItemKind::ToolResult, chars, label, Some(tool), target);
         self.pending.took(Some(self.now - asked));
@@ -132,17 +170,30 @@ impl State {
     fn attachment(&mut self, v: &Value) {
         let a = &v["attachment"];
         let kind = match a["type"].as_str().unwrap_or("") {
-            "skill_listing" | "mcp_instructions_delta" | "deferred_tools_delta" | "hook_additional_context" | "hook_success" => ItemKind::Setup,
+            "skill_listing"
+            | "mcp_instructions_delta"
+            | "deferred_tools_delta"
+            | "hook_additional_context"
+            | "hook_success" => ItemKind::Setup,
             "instructions" => ItemKind::Memory,
-            "queued_command" | "deferred_tools_record" | "prompt_snapshot" | "credential_org" | "remote_session_change" => return,
+            "queued_command"
+            | "deferred_tools_record"
+            | "prompt_snapshot"
+            | "credential_org"
+            | "remote_session_change" => return,
             _ => ItemKind::SystemPrompt,
         };
-        let rendered: usize = v["rendered"].as_array().into_iter().flatten().map(|r| r["content"].as_str().map_or(0, str::len)).sum();
+        let rendered: usize =
+            v["rendered"].as_array().into_iter().flatten().map(|r| r["content"].as_str().map_or(0, str::len)).sum();
         // A hook's output is rendered once, as `hook_additional_context`.
         if a["type"] == "hook_success" {
             return;
         }
-        let text: String = if rendered > 0 { v["rendered"].as_array().into_iter().flatten().filter_map(|r| r["content"].as_str()).collect() } else { a.to_string() };
+        let text: String = if rendered > 0 {
+            v["rendered"].as_array().into_iter().flatten().filter_map(|r| r["content"].as_str()).collect()
+        } else {
+            a.to_string()
+        };
         self.pending.add_text(&self.id.clone(), kind, &text, a["type"].as_str().unwrap_or("attachment"));
     }
 

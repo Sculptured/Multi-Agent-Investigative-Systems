@@ -1,6 +1,6 @@
 use clap::{Args, Parser, Subcommand};
 use mais::adapters::{sculptured, team};
-use mais::link::{assemble, read_logs, Selection};
+use mais::link::{Selection, assemble, read_logs};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -48,7 +48,9 @@ struct Input {
 }
 
 fn time(s: &Option<String>) -> Result<Option<i64>, String> {
-    s.as_deref().map(|t| mais::adapters::ms(t).ok_or_else(|| format!("{t} is not a time such as 2026-10-15T15:40:00-04:00"))).transpose()
+    s.as_deref()
+        .map(|t| mais::adapters::ms(t).ok_or_else(|| format!("{t} is not a time such as 2026-10-15T15:40:00-04:00")))
+        .transpose()
 }
 
 fn report(i: &Input) -> Result<mais::report::Report, String> {

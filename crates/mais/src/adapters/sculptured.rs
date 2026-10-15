@@ -30,7 +30,12 @@ pub fn read(text: &str) -> Result<RunExport, String> {
     if header["format"] != "sculptured.session/v1" {
         return Err("not a sculptured.session/v1 file".into());
     }
-    let mut x = RunExport { team: team_of(&header), started_ms: header["started_ms"].as_i64().unwrap_or(0), ended_ms: header["ended_ms"].as_i64(), ..Default::default() };
+    let mut x = RunExport {
+        team: team_of(&header),
+        started_ms: header["started_ms"].as_i64().unwrap_or(0),
+        ended_ms: header["ended_ms"].as_i64(),
+        ..Default::default()
+    };
     for a in header["agents"].as_array().into_iter().flatten() {
         if let (Some(id), Some(p)) = (a["id"].as_str(), a["parent"].as_str()) {
             x.parents.insert(member_of(id), member_of(p));
@@ -57,12 +62,21 @@ fn event(x: &mut RunExport, e: &Value) {
         "plan-usage-reported" => x.readings.extend(readings(&b["usage"], at, seat)),
         "handed-over" => {
             for f in b["from"].as_array().into_iter().flatten() {
-                x.team.edges.push(Edge { from: member_of(f["seat"].as_str().unwrap_or_default()), to: member_of(seat), kind: EdgeKind::HandsWorkTo, at_ms: Some(at) });
+                x.team.edges.push(Edge {
+                    from: member_of(f["seat"].as_str().unwrap_or_default()),
+                    to: member_of(seat),
+                    kind: EdgeKind::HandsWorkTo,
+                    at_ms: Some(at),
+                });
             }
         }
         "budget-state-changed" => {
             let kind = if b["state"] == "stopped" { BudgetEventKind::Stop } else { BudgetEventKind::WrapUp };
-            x.budget_events.push(BudgetEvent { kind, at_ms: at, reason: b["reason"].as_str().unwrap_or_default().to_string() });
+            x.budget_events.push(BudgetEvent {
+                kind,
+                at_ms: at,
+                reason: b["reason"].as_str().unwrap_or_default().to_string(),
+            });
         }
         _ => {}
     }
@@ -70,29 +84,60 @@ fn event(x: &mut RunExport, e: &Value) {
 
 fn readings(u: &Value, at: i64, seat: &str) -> Vec<PlanReading> {
     let provider = u["provider"].as_str().unwrap_or_default();
-    u["windows"].as_array().into_iter().flatten().filter_map(|w| Some(PlanReading {
-        provider: provider.to_string(),
-        window: w["name"].as_str()?.to_string(),
-        percent: w["used_percent"].as_f64()?,
-        resets_at: w["resets_at"].as_i64(),
-        at_ms: at,
-        reporter: Some(member_of(seat)),
-    })).collect()
+    u["windows"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|w| {
+            Some(PlanReading {
+                provider: provider.to_string(),
+                window: w["name"].as_str()?.to_string(),
+                percent: w["used_percent"].as_f64()?,
+                resets_at: w["resets_at"].as_i64(),
+                at_ms: at,
+                reporter: Some(member_of(seat)),
+            })
+        })
+        .collect()
+}
+
+fn list(v: &Value) -> impl Iterator<Item = &Value> {
+    v.as_array().into_iter().flatten()
+}
+
+fn members(d: &Value) -> Vec<Member> {
+    let groups: BTreeMap<&str, &str> =
+        list(&d["groups"]).filter_map(|g| Some((g["id"].as_str()?, g["label"].as_str()?))).collect();
+    list(&d["agents"])
+        .filter_map(|a| {
+            Some(Member {
+                id: a["id"].as_str()?.to_string(),
+                name: a["name"].as_str()?.to_string(),
+                group: a["group_id"].as_str().and_then(|g| groups.get(g)).map(|s| s.to_string()),
+            })
+        })
+        .collect()
+}
+
+fn edges(d: &Value) -> Vec<Edge> {
+    list(&d["connections"])
+        .filter(|c| c["kind"] == "hands-work-to")
+        .filter_map(|c| {
+            let (from, to) = (c["from"].as_str()?.to_string(), c["to"].as_str()?.to_string());
+            Some(Edge { from, to, kind: EdgeKind::HandsWorkTo, at_ms: None })
+        })
+        .collect()
 }
 
 /// The team in the header (`sculptured.team/v1`).
 fn team_of(h: &Value) -> Team {
     let d = &h["team"]["team"];
-    let groups: BTreeMap<&str, &str> = d["groups"].as_array().into_iter().flatten().filter_map(|g| Some((g["id"].as_str()?, g["label"].as_str()?))).collect();
-    let members = d["agents"].as_array().into_iter().flatten().filter_map(|a| Some(Member {
-        id: a["id"].as_str()?.to_string(),
-        name: a["name"].as_str()?.to_string(),
-        group: a["group_id"].as_str().and_then(|g| groups.get(g)).map(|s| s.to_string()),
-    })).collect();
-    let edges = d["connections"].as_array().into_iter().flatten().filter(|c| c["kind"] == "hands-work-to").filter_map(|c| Some(Edge {
-        from: c["from"].as_str()?.to_string(), to: c["to"].as_str()?.to_string(), kind: EdgeKind::HandsWorkTo, at_ms: None,
-    })).collect();
-    Team { name: d["name"].as_str().map(String::from), members, edges, budget: budget_of(&d["budget"]) }
+    Team {
+        name: d["name"].as_str().map(String::from),
+        members: members(d),
+        edges: edges(d),
+        budget: budget_of(&d["budget"]),
+    }
 }
 
 fn budget_of(b: &Value) -> Option<BudgetLimits> {
@@ -101,7 +146,15 @@ fn budget_of(b: &Value) -> Option<BudgetLimits> {
     }
     let pair = |v: &Value| v["hard"].as_f64().map(|h| (v["soft"].as_f64().unwrap_or(h * 0.85), h));
     Some(BudgetLimits {
-        plan: b["plan"].as_array().into_iter().flatten().filter_map(|p| { let (s, h) = pair(p)?; Some((p["provider"].as_str()?.to_string(), p["window"].as_str()?.to_string(), s, h)) }).collect(),
+        plan: b["plan"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|p| {
+                let (s, h) = pair(p)?;
+                Some((p["provider"].as_str()?.to_string(), p["window"].as_str()?.to_string(), s, h))
+            })
+            .collect(),
         tokens: pair(&b["tokens"]).map(|(s, h)| (s as u64, h as u64)),
         minutes: pair(&b["minutes"]).map(|(s, h)| (s as u32, h as u32)),
         max_working: b["max_working"].as_u64().map(|n| n as u32),

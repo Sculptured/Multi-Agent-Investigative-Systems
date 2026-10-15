@@ -1,0 +1,27 @@
+name: Bug report
+description: A reader, an analysis or the command gives a wrong or missing result.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, what you expected, and what you got.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: The smallest log lines that show it
+      description: Remove prompts, code and paths you do not want public. A redacted report (`--redact`) helps too.
+      render: json
+  - type: input
+    id: cli
+    attributes:
+      label: Agent CLI and version
+      description: For example Claude Code 2.4.1 or Codex 0.80.0.
+  - type: input
+    id: version
+    attributes:
+      label: MAIS version
+      description: Output of `mais --version`, or the commit.

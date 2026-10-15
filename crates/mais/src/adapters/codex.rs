@@ -1,7 +1,7 @@
 //! Codex session logs: `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`. One `token_usage_record` per
 //! model response (its `input_tokens` include the cached ones); tool calls and outputs joined by
 //! `call_id`; plan readings from `token_count.rate_limits`.
-use super::{ms, target_of, Pending, Session};
+use super::{Pending, Session, ms, target_of};
 use crate::model::{Agent, Call, ItemKind, PlanReading, Runtime, Usage};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -36,20 +36,35 @@ pub fn read(file: &Path) -> std::io::Result<Session> {
     if st.id.is_empty() {
         st.id = file.file_stem().and_then(|s| s.to_str()).unwrap_or_default().to_string();
     }
-    for c in &mut st.s.calls {
-        c.agent.clone_from(&st.id);
-    }
-    for i in &mut st.s.items {
-        i.agent.clone_from(&st.id);
-    }
-    for r in &mut st.s.readings {
-        r.reporter = Some(st.id.clone());
-    }
-    st.s.agent = Some(Agent { id: st.id.clone(), name: st.id.clone(), group: None, role: None, runtime: Runtime::Codex, session: st.id.clone(), parent: None, folder: st.folder, cli_cost_usd: None });
-    Ok(st.s)
+    Ok(st.finish())
 }
 
 impl State {
+    /// Puts the session's id on everything it read.
+    fn finish(mut self) -> Session {
+        for c in &mut self.s.calls {
+            c.agent.clone_from(&self.id);
+        }
+        for i in &mut self.s.items {
+            i.agent.clone_from(&self.id);
+        }
+        for r in &mut self.s.readings {
+            r.reporter = Some(self.id.clone());
+        }
+        self.s.agent = Some(Agent {
+            id: self.id.clone(),
+            name: self.id.clone(),
+            group: None,
+            role: None,
+            runtime: Runtime::Codex,
+            session: self.id.clone(),
+            parent: None,
+            folder: self.folder.take(),
+            cli_cost_usd: None,
+        });
+        self.s
+    }
+
     fn line(&mut self, v: &Value) {
         let p = &v["payload"];
         let at = v["timestamp"].as_str().and_then(ms).unwrap_or(0);
@@ -79,11 +94,24 @@ impl State {
         }
         let u = &p["usage"];
         let n = |k: &str| u[k].as_u64().unwrap_or(0);
-        let usage = Usage { input: n("input_tokens").saturating_sub(n("cached_input_tokens")), cache_read: n("cached_input_tokens"), cache_write: n("cache_write_input_tokens"), output: n("output_tokens") };
+        let usage = Usage {
+            input: n("input_tokens").saturating_sub(n("cached_input_tokens")),
+            cache_read: n("cached_input_tokens"),
+            cache_write: n("cache_write_input_tokens"),
+            output: n("output_tokens"),
+        };
         let seq = self.s.calls.len() as u32;
         self.pending.settle(seq, &mut self.s.items);
         let started = self.input_ms.take();
-        self.s.calls.push(Call { agent: String::new(), seq, at_ms: at, model: None, usage, started_ms: started, ended_ms: Some(at) });
+        self.s.calls.push(Call {
+            agent: String::new(),
+            seq,
+            at_ms: at,
+            model: None,
+            usage,
+            started_ms: started,
+            ended_ms: Some(at),
+        });
         let chars = std::mem::take(&mut self.reply);
         self.pending.add("", ItemKind::Reply, chars, "its own reply", None, None);
     }
@@ -93,7 +121,8 @@ impl State {
             "message" => self.message(p),
             "custom_tool_call" => self.call(p, p["input"].as_str().map(exec_target)),
             "function_call" => {
-                let args: Value = p["arguments"].as_str().and_then(|a| serde_json::from_str(a).ok()).unwrap_or_default();
+                let args: Value =
+                    p["arguments"].as_str().and_then(|a| serde_json::from_str(a).ok()).unwrap_or_default();
                 self.call(p, target_of(&args));
             }
             "custom_tool_call_output" | "function_call_output" => self.output(p),
@@ -109,7 +138,8 @@ impl State {
 
     fn output(&mut self, p: &Value) {
         let chars = text_of(&p["output"]).len();
-        let (tool, target, asked) = self.tools.get(p["call_id"].as_str().unwrap_or_default()).cloned().unwrap_or(("?".into(), None, self.now));
+        let (tool, target, asked) =
+            self.tools.get(p["call_id"].as_str().unwrap_or_default()).cloned().unwrap_or(("?".into(), None, self.now));
         self.pending.add("", ItemKind::ToolResult, chars, "result", Some(tool), target);
         self.pending.took(Some(self.now - asked));
         self.input_ms = Some(self.now);
@@ -152,14 +182,23 @@ impl State {
                 Some(m) => format!("{m}_minutes"),
                 None => continue,
             };
-            self.s.readings.push(PlanReading { provider: "codex".into(), window, percent, resets_at: w["resets_at"].as_i64(), at_ms: at, reporter: None });
+            self.s.readings.push(PlanReading {
+                provider: "codex".into(),
+                window,
+                percent,
+                resets_at: w["resets_at"].as_i64(),
+                at_ms: at,
+                reporter: None,
+            });
         }
     }
 }
 
 /// Text of a string or a list of `{type, text}` parts.
 fn text_of(v: &Value) -> String {
-    v.as_str().map(String::from).unwrap_or_else(|| v.as_array().into_iter().flatten().filter_map(|x| x["text"].as_str()).collect::<Vec<_>>().join("\n"))
+    v.as_str().map(String::from).unwrap_or_else(|| {
+        v.as_array().into_iter().flatten().filter_map(|x| x["text"].as_str()).collect::<Vec<_>>().join("\n")
+    })
 }
 
 /// The first shell command in a Codex `exec` script, else its start.

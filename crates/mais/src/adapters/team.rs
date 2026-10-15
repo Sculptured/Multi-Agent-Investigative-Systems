@@ -27,14 +27,23 @@ impl Team {
 
 /// A MADL document's agents, groups, hand-work-to connections and run budget.
 pub fn from_madl(doc: &madl::Document) -> Team {
-    let groups: BTreeMap<&str, String> = doc.groups.iter().map(|g| (g.id.as_str(), g.name.clone().unwrap_or_else(|| g.id.clone()))).collect();
-    let members = doc.agents.iter().map(|a| Member {
-        id: a.id.clone(),
-        name: a.name.clone().unwrap_or_else(|| a.id.clone()),
-        group: a.groups.first().map(|g| groups.get(g.as_str()).cloned().unwrap_or_else(|| g.clone())),
-    }).collect();
-    let edges = doc.connections.iter().filter(|c| matches!(c.kind, madl::model::ConnectionKind::Handoff | madl::model::ConnectionKind::Delegate))
-        .map(|c| Edge { from: c.from.clone(), to: c.to.clone(), kind: EdgeKind::HandsWorkTo, at_ms: None }).collect();
+    let groups: BTreeMap<&str, String> =
+        doc.groups.iter().map(|g| (g.id.as_str(), g.name.clone().unwrap_or_else(|| g.id.clone()))).collect();
+    let members = doc
+        .agents
+        .iter()
+        .map(|a| Member {
+            id: a.id.clone(),
+            name: a.name.clone().unwrap_or_else(|| a.id.clone()),
+            group: a.groups.first().map(|g| groups.get(g.as_str()).cloned().unwrap_or_else(|| g.clone())),
+        })
+        .collect();
+    let edges = doc
+        .connections
+        .iter()
+        .filter(|c| matches!(c.kind, madl::model::ConnectionKind::Handoff | madl::model::ConnectionKind::Delegate))
+        .map(|c| Edge { from: c.from.clone(), to: c.to.clone(), kind: EdgeKind::HandsWorkTo, at_ms: None })
+        .collect();
     Team { name: Some(doc.system.name.clone()), members, edges, budget: doc.system.budget.as_ref().map(budget_of) }
 }
 

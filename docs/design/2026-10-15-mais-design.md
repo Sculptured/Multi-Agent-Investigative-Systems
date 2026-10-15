@@ -18,7 +18,7 @@ tokens). MAIS makes that investigation repeatable for any run.
 **Who it is for:** anyone running several Claude Code or Codex agents together, with or without
 Sculptured. Sculptured uses it for its own **Where tokens went** view.
 
-**Success:** given the session logs of the 15 October C172 run and its MADL team file, `mais report`
+**Success:** given the session logs of the 15 October C172 run and its run export, `mais json`
 reproduces that investigation's findings: the same totals within 1%, the same top causes in the same
 order, and every figure labelled as measured, estimated or unknown.
 

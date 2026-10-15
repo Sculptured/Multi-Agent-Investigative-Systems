@@ -23,14 +23,24 @@ impl Usage {
 
     /// Each field's larger value (one message's lines repeat its usage, output growing).
     pub fn max(self, o: Self) -> Self {
-        Self { input: self.input.max(o.input), cache_read: self.cache_read.max(o.cache_read), cache_write: self.cache_write.max(o.cache_write), output: self.output.max(o.output) }
+        Self {
+            input: self.input.max(o.input),
+            cache_read: self.cache_read.max(o.cache_read),
+            cache_write: self.cache_write.max(o.cache_write),
+            output: self.output.max(o.output),
+        }
     }
 }
 
 impl std::ops::Add for Usage {
     type Output = Self;
     fn add(self, o: Self) -> Self {
-        Self { input: self.input + o.input, cache_read: self.cache_read + o.cache_read, cache_write: self.cache_write + o.cache_write, output: self.output + o.output }
+        Self {
+            input: self.input + o.input,
+            cache_read: self.cache_read + o.cache_read,
+            cache_write: self.cache_write + o.cache_write,
+            output: self.output + o.output,
+        }
     }
 }
 

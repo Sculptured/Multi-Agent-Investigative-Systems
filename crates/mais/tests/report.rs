@@ -1,6 +1,6 @@
 use mais::adapters::team;
-use mais::link::{assemble, read_logs, Selection};
-use mais::report::{redact, schema, Report};
+use mais::link::{Selection, assemble, read_logs};
+use mais::report::{Report, redact, schema};
 use std::path::PathBuf;
 
 fn root(p: &str) -> PathBuf {
@@ -32,7 +32,10 @@ fn the_published_schema_matches_the_report_types() {
 
 #[test]
 fn the_fixture_runs_report_is_unchanged() {
-    matches_file("fixtures/golden/claude-team.report.json", &(serde_json::to_string_pretty(&fixture_report()).unwrap() + "\n"));
+    matches_file(
+        "fixtures/golden/claude-team.report.json",
+        &(serde_json::to_string_pretty(&fixture_report()).unwrap() + "\n"),
+    );
 }
 
 #[test]
@@ -44,7 +47,13 @@ fn a_report_reads_back_as_the_same_report() {
 #[test]
 fn a_redacted_report_keeps_sizes_but_no_commands_paths_or_file_names() {
     let r = fixture_report();
-    let targets: Vec<String> = r.costliest.iter().filter_map(|c| c.target.clone()).chain(r.shared_reads.iter().map(|s| s.target.clone())).chain(r.skipped.keys().cloned()).collect();
+    let targets: Vec<String> = r
+        .costliest
+        .iter()
+        .filter_map(|c| c.target.clone())
+        .chain(r.shared_reads.iter().map(|s| s.target.clone()))
+        .chain(r.skipped.keys().cloned())
+        .collect();
     assert!(!targets.is_empty(), "the fixture has targets to hide");
     let mut red = r.clone();
     redact(&mut red);
@@ -53,5 +62,8 @@ fn a_redacted_report_keeps_sizes_but_no_commands_paths_or_file_names() {
         assert!(!json.contains(&serde_json::to_string(t).unwrap()), "{t} is still in the report");
     }
     assert_eq!(red.run.tokens, r.run.tokens);
-    assert_eq!(red.costliest.iter().map(|c| c.reread.value).collect::<Vec<_>>(), r.costliest.iter().map(|c| c.reread.value).collect::<Vec<_>>());
+    assert_eq!(
+        red.costliest.iter().map(|c| c.reread.value).collect::<Vec<_>>(),
+        r.costliest.iter().map(|c| c.reread.value).collect::<Vec<_>>()
+    );
 }

@@ -1,14 +1,14 @@
 //! The analyses: from a `Run` to a `Report`.
 pub mod causes;
+mod findings;
 pub mod plan;
 pub mod sharing;
 pub mod summary;
 pub mod time;
 pub mod tokens;
-mod findings;
 
 use crate::model::Run;
-use crate::report::{Report, FORMAT};
+use crate::report::{FORMAT, Report};
 
 /// Rows kept in the long lists.
 pub const TOP: usize = 25;
