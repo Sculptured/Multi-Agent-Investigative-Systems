@@ -53,3 +53,13 @@ fn a_subagent_is_its_own_agent_under_its_parent() {
     assert_eq!((a.id.as_str(), a.parent.as_deref(), a.name.as_str()), ("s1/ax1", Some("s1"), "List files"));
     assert_eq!(sub.calls[0].usage.cache_write, 8000);
 }
+
+#[test]
+fn a_call_knows_when_its_request_went_out_and_a_tool_how_long_it_ran() {
+    let s = &fixture()[0];
+    let c = &s.calls[0];
+    assert_eq!(c.ended_ms.zip(c.started_ms).map(|(e, b)| e - b), Some(30_000), "request at :30, answer at the next minute");
+    assert_eq!(s.calls[1].started_ms, None, "no request line: unknown, not zero");
+    let r = s.items.iter().find(|i| i.kind == ItemKind::ToolResult).unwrap();
+    assert_eq!(r.took_ms, Some(0));
+}

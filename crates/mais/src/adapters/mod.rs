@@ -5,7 +5,7 @@ pub mod codex;
 pub mod sculptured;
 pub mod team;
 
-use crate::model::{Agent, Call, ContextItem, ItemKind, PlanReading};
+use crate::model::{Agent, Call, ContextItem, ItemKind, PlanReading, ToolDef};
 
 /// One agent's session as a CLI recorded it.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -16,6 +16,7 @@ pub struct Session {
     /// Calls that follow a compaction.
     pub compactions: Vec<u32>,
     pub readings: Vec<PlanReading>,
+    pub tools: Vec<ToolDef>,
     /// The agent's first message, to find which team member it is.
     pub first_message: String,
     /// Lines of a kind this reader does not know.
@@ -31,7 +32,22 @@ impl Pending {
         if chars == 0 {
             return;
         }
-        self.0.push(ContextItem { agent: agent.to_string(), first_call: 0, kind, chars: chars as u64, tokens: crate::model::Figure::unknown(), label: label.to_string(), tool, target });
+        self.0.push(ContextItem { agent: agent.to_string(), first_call: 0, kind, chars: chars as u64, tokens: crate::model::Figure::unknown(), label: label.to_string(), tool, target, fingerprint: None, took_ms: None });
+    }
+
+    /// Sets how long the latest item's tool ran.
+    pub(crate) fn took(&mut self, ms: Option<i64>) {
+        if let Some(last) = self.0.last_mut() {
+            last.took_ms = ms.filter(|m| *m >= 0);
+        }
+    }
+
+    /// `add`, keeping a fingerprint of `content` so identical parts can be found across agents.
+    pub(crate) fn add_text(&mut self, agent: &str, kind: ItemKind, content: &str, label: &str) {
+        self.add(agent, kind, content.len(), label, None, None);
+        if let Some(last) = self.0.last_mut().filter(|_| !content.is_empty()) {
+            last.fingerprint = Some(fingerprint(content));
+        }
     }
 
     /// Hands the waiting items to call `seq`.
@@ -41,6 +57,16 @@ impl Pending {
             into.push(i);
         }
     }
+}
+
+/// FNV-1a over the text: stable across builds, enough to tell identical parts apart.
+pub fn fingerprint(text: &str) -> u64 {
+    text.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3))
+}
+
+/// A tool's short name: `mcp__server__tool` → `tool`.
+pub fn short_tool(name: &str) -> String {
+    name.rsplit("__").next().unwrap_or(name).to_string()
 }
 
 /// Milliseconds since the Unix epoch from an RFC 3339 time.

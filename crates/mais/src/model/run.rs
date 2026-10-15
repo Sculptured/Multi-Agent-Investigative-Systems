@@ -39,6 +39,9 @@ pub struct Call {
     pub at_ms: i64,
     pub model: Option<String>,
     pub usage: Usage,
+    /// When the request went out and when its answer was complete, where the log says.
+    pub started_ms: Option<i64>,
+    pub ended_ms: Option<i64>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
@@ -74,6 +77,18 @@ pub struct ContextItem {
     pub tool: Option<String>,
     /// The command, file or query a tool result came from.
     pub target: Option<String>,
+    /// A hash of its content, for the parts of a start that agents may share; None when not kept.
+    pub fingerprint: Option<u64>,
+    /// A tool result: how long the tool ran (from its call to its result), where the log says.
+    pub took_ms: Option<i64>,
+}
+
+/// A tool an agent was given (its definition is sent on every call).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ToolDef {
+    pub agent: AgentId,
+    pub name: String,
+    pub chars: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -142,6 +157,8 @@ pub struct Run {
     pub budget: Option<BudgetLimits>,
     pub budget_events: Vec<BudgetEvent>,
     pub edges: Vec<Edge>,
+    /// The tools each agent was given.
+    pub tools: Vec<ToolDef>,
     /// Lines no adapter understood, by file.
     pub skipped: BTreeMap<String, u64>,
 }

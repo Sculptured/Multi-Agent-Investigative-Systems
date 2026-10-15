@@ -7,7 +7,7 @@ use std::io::BufRead;
 use std::path::Path;
 
 /// Line kinds that carry nothing MAIS needs.
-const QUIET: &[&str] = &["queue-operation", "last-prompt", "atis-latch", "api-request", "api-request-blob", "summary", "file-history-snapshot", "custom-title", "agent-name", "permission-mode", "pr-link"];
+const QUIET: &[&str] = &["queue-operation", "last-prompt", "atis-latch", "api-request-blob", "summary", "file-history-snapshot", "custom-title", "agent-name", "permission-mode", "pr-link"];
 
 #[derive(Default)]
 struct State {
@@ -16,8 +16,12 @@ struct State {
     pending: Pending,
     /// Message id → its call's index.
     calls: HashMap<String, usize>,
-    /// Tool use id → (tool, target).
-    tools: HashMap<String, (String, Option<String>)>,
+    /// Tool use id → (tool, target, when it was asked for).
+    tools: HashMap<String, (String, Option<String>, i64)>,
+    /// When the latest request went out (`api-request`), for the call it starts.
+    request_ms: Option<i64>,
+    /// The time of the line being read.
+    now: i64,
     /// The latest message's reply, added to the next call's context.
     reply: (String, usize),
     shape_seen: bool,
@@ -43,7 +47,11 @@ impl State {
         if self.folder.is_none() {
             self.folder = v["cwd"].as_str().map(String::from);
         }
+        if let Some(t) = v["timestamp"].as_str().and_then(ms) {
+            self.now = t;
+        }
         match v["type"].as_str().unwrap_or("") {
+            "api-request" => self.request_ms = Some(self.now),
             "assistant" => self.assistant(v),
             "user" => self.user(v),
             "attachment" => self.attachment(v),
@@ -68,11 +76,12 @@ impl State {
             None => self.new_call(mid, at, m["model"].as_str()),
         };
         self.s.calls[idx].usage = self.s.calls[idx].usage.max(usage);
+        self.s.calls[idx].ended_ms = Some(at);
         for b in m["content"].as_array().into_iter().flatten() {
             self.reply.1 += reply_chars(b);
             if b["type"] == "tool_use" {
-                let name = b["name"].as_str().unwrap_or("?").rsplit("__").next().unwrap_or("?").to_string();
-                self.tools.insert(b["id"].as_str().unwrap_or_default().to_string(), (name, target_of(&b["input"])));
+                let name = crate::adapters::short_tool(b["name"].as_str().unwrap_or("?"));
+                self.tools.insert(b["id"].as_str().unwrap_or_default().to_string(), (name, target_of(&b["input"]), at));
             }
         }
     }
@@ -82,7 +91,8 @@ impl State {
         let (_, chars) = std::mem::take(&mut self.reply);
         self.pending.add(&self.id.clone(), ItemKind::Reply, chars, "its own reply", None, None);
         self.pending.settle(seq, &mut self.s.items);
-        self.s.calls.push(Call { agent: self.id.clone(), seq, at_ms: at, model: model.map(String::from), usage: Usage::default() });
+        let started = self.request_ms.take();
+        self.s.calls.push(Call { agent: self.id.clone(), seq, at_ms: at, model: model.map(String::from), usage: Usage::default(), started_ms: started, ended_ms: Some(at) });
         self.calls.insert(mid.to_string(), seq as usize);
         seq as usize
     }
@@ -113,9 +123,10 @@ impl State {
     fn tool_result(&mut self, b: &Value) {
         let content = &b["content"];
         let chars = content.as_str().map_or_else(|| content_chars(content), str::len);
-        let (tool, target) = self.tools.get(b["tool_use_id"].as_str().unwrap_or_default()).cloned().unwrap_or(("?".into(), None));
+        let (tool, target, asked) = self.tools.get(b["tool_use_id"].as_str().unwrap_or_default()).cloned().unwrap_or(("?".into(), None, self.now));
         let label = if content.to_string().contains("\"type\":\"image\"") { "image" } else { "result" };
         self.pending.add(&self.id.clone(), ItemKind::ToolResult, chars, label, Some(tool), target);
+        self.pending.took(Some(self.now - asked));
     }
 
     fn attachment(&mut self, v: &Value) {
@@ -131,8 +142,8 @@ impl State {
         if a["type"] == "hook_success" {
             return;
         }
-        let chars = if rendered > 0 { rendered } else { a.to_string().len() };
-        self.pending.add(&self.id.clone(), kind, chars, a["type"].as_str().unwrap_or("attachment"), None, None);
+        let text: String = if rendered > 0 { v["rendered"].as_array().into_iter().flatten().filter_map(|r| r["content"].as_str()).collect() } else { a.to_string() };
+        self.pending.add_text(&self.id.clone(), kind, &text, a["type"].as_str().unwrap_or("attachment"));
     }
 
     /// The first request's system prompt and tool definitions.
@@ -142,8 +153,12 @@ impl State {
         }
         let sh = &v["shape"];
         let id = self.id.clone();
-        self.pending.add(&id, ItemKind::SystemPrompt, sh["system"].to_string().len(), "system prompt", None, None);
-        self.pending.add(&id, ItemKind::ToolDefinitions, sh["tools"].to_string().len(), "tool definitions", None, None);
+        self.pending.add_text(&id, ItemKind::SystemPrompt, &sh["system"].to_string(), "system prompt");
+        self.pending.add_text(&id, ItemKind::ToolDefinitions, &sh["tools"].to_string(), "tool definitions");
+        for t in sh["tools"].as_array().into_iter().flatten() {
+            let name = crate::adapters::short_tool(t["name"].as_str().unwrap_or("?"));
+            self.s.tools.push(crate::model::ToolDef { agent: id.clone(), name, chars: t.to_string().len() as u64 });
+        }
     }
 }
 

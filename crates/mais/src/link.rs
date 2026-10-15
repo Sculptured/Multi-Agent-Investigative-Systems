@@ -128,6 +128,7 @@ fn add(run: &mut Run, s: Session, id_of: &dyn Fn(&str) -> String, team: Option<&
     run.calls.extend(s.calls.into_iter().filter(|c| c.seq >= lo && c.seq <= hi).map(|c| crate::model::Call { agent: id.clone(), ..c }));
     run.items.extend(s.items.into_iter().filter(|i| i.first_call <= hi).map(|i| crate::model::ContextItem { agent: id.clone(), ..i }));
     run.compactions.extend(s.compactions.into_iter().map(|c| (id.clone(), c)));
+    run.tools.extend(s.tools.into_iter().map(|t| crate::model::ToolDef { agent: id.clone(), ..t }));
     run.readings.extend(s.readings.into_iter().filter(|r| r.at_ms >= from && r.at_ms <= to).map(|r| crate::model::PlanReading { reporter: Some(id.clone()), ..r }));
 }
 

@@ -35,3 +35,11 @@ fn plan_readings_compaction_and_unknown_lines() {
     assert_eq!(s.compactions, [2]);
     assert_eq!(s.skipped, 1);
 }
+
+#[test]
+fn a_response_starts_at_the_latest_input_and_a_tool_runs_from_call_to_output() {
+    let s = fixture();
+    assert_eq!(s.calls[0].ended_ms.zip(s.calls[0].started_ms).map(|(e, b)| e - b), Some(120_000), "the job at 22:10, the answer at 22:12");
+    let r = s.items.iter().find(|i| i.tool.as_deref() == Some("exec")).unwrap();
+    assert_eq!(r.took_ms, Some(60_000));
+}

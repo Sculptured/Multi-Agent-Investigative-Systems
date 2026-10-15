@@ -15,7 +15,10 @@ struct State {
     id: String,
     s: Session,
     pending: Pending,
-    tools: HashMap<String, (String, Option<String>)>,
+    tools: HashMap<String, (String, Option<String>, i64)>,
+    /// The time of the latest line before the coming model response: its request went out then.
+    input_ms: Option<i64>,
+    now: i64,
     responses: HashSet<String>,
     reply: usize,
     folder: Option<String>,
@@ -50,6 +53,7 @@ impl State {
     fn line(&mut self, v: &Value) {
         let p = &v["payload"];
         let at = v["timestamp"].as_str().and_then(ms).unwrap_or(0);
+        self.now = at;
         match v["type"].as_str().unwrap_or("") {
             "session_meta" => self.meta(p),
             "token_usage_record" => self.usage(p, at),
@@ -64,8 +68,8 @@ impl State {
     fn meta(&mut self, p: &Value) {
         self.id = p["id"].as_str().unwrap_or_default().to_string();
         self.folder = p["cwd"].as_str().map(String::from);
-        let base = p["base_instructions"]["text"].as_str().map_or(0, str::len);
-        self.pending.add("", ItemKind::SystemPrompt, base, "base instructions", None, None);
+        let base = p["base_instructions"]["text"].as_str().unwrap_or_default();
+        self.pending.add_text("", ItemKind::SystemPrompt, base, "base instructions");
     }
 
     fn usage(&mut self, p: &Value, at: i64) {
@@ -78,7 +82,8 @@ impl State {
         let usage = Usage { input: n("input_tokens").saturating_sub(n("cached_input_tokens")), cache_read: n("cached_input_tokens"), cache_write: n("cache_write_input_tokens"), output: n("output_tokens") };
         let seq = self.s.calls.len() as u32;
         self.pending.settle(seq, &mut self.s.items);
-        self.s.calls.push(Call { agent: String::new(), seq, at_ms: at, model: None, usage });
+        let started = self.input_ms.take();
+        self.s.calls.push(Call { agent: String::new(), seq, at_ms: at, model: None, usage, started_ms: started, ended_ms: Some(at) });
         let chars = std::mem::take(&mut self.reply);
         self.pending.add("", ItemKind::Reply, chars, "its own reply", None, None);
     }
@@ -99,21 +104,26 @@ impl State {
     fn call(&mut self, p: &Value, target: Option<String>) {
         let name = p["name"].as_str().unwrap_or("?").to_string();
         self.reply += p["input"].as_str().map_or_else(|| p["arguments"].as_str().map_or(0, str::len), str::len);
-        self.tools.insert(p["call_id"].as_str().unwrap_or_default().to_string(), (name, target));
+        self.tools.insert(p["call_id"].as_str().unwrap_or_default().to_string(), (name, target, self.now));
     }
 
     fn output(&mut self, p: &Value) {
         let chars = text_of(&p["output"]).len();
-        let (tool, target) = self.tools.get(p["call_id"].as_str().unwrap_or_default()).cloned().unwrap_or(("?".into(), None));
+        let (tool, target, asked) = self.tools.get(p["call_id"].as_str().unwrap_or_default()).cloned().unwrap_or(("?".into(), None, self.now));
         self.pending.add("", ItemKind::ToolResult, chars, "result", Some(tool), target);
+        self.pending.took(Some(self.now - asked));
+        self.input_ms = Some(self.now);
     }
 
     fn message(&mut self, p: &Value) {
         let text = text_of(&p["content"]);
         match p["role"].as_str().unwrap_or("") {
             "assistant" => self.reply += text.len(),
-            "developer" => self.pending.add("", ItemKind::SystemPrompt, text.len(), "developer instructions", None, None),
-            "user" => self.user(&text),
+            "developer" => self.pending.add_text("", ItemKind::SystemPrompt, &text, "developer instructions"),
+            "user" => {
+                self.user(&text);
+                self.input_ms = Some(self.now);
+            }
             _ => {}
         }
     }
