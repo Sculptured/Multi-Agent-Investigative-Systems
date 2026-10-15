@@ -1,0 +1,14 @@
+madl: draft
+system:
+  id: c172
+  name: C172 Model
+  budget:
+    plan: [ { provider: claude, window: five_hour, soft: 25, hard: 30 } ]
+    max_working: 6
+groups:
+  - { id: fuel, name: Fuel Systems }
+agents:
+  - { id: dev8, name: Developer 8, groups: [fuel] }
+  - { id: rev8, name: Reviewer 8, groups: [fuel] }
+connections:
+  - { from: dev8, to: rev8, kind: handoff }

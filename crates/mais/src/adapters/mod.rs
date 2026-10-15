@@ -2,6 +2,8 @@
 //! agent's calls and context) or team facts; `crate::link` assembles them into a `Run`.
 pub mod claude;
 pub mod codex;
+pub mod sculptured;
+pub mod team;
 
 use crate::model::{Agent, Call, ContextItem, ItemKind, PlanReading};
 
