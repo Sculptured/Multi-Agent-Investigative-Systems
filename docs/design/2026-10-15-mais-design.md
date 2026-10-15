@@ -29,7 +29,7 @@ order, and every figure labelled as measured, estimated or unknown.
 | Fork an observability platform? | No. None covers context composition, re-read cost or plan windows; the platforms need ClickHouse and several services; licences (ELv2, AGPL) or maintenance status rule others out. MAIS exports to them later instead. |
 | Language and licence | Rust; Apache-2.0, like MADL and Sculptured's open core. |
 | Team structure | From a MADL document. Without one, each session is an agent with no team. |
-| First version | Claude Code and Codex logs, Sculptured run exports, MADL; JSON and HTML reports. |
+| First version | Claude Code and Codex logs, Sculptured run exports, MADL; the JSON report. |
 | Second version | OpenTelemetry GenAI spans out (for Langfuse, Phoenix, Opik, Grafana); Claude Code's own OpenTelemetry export in. |
 | Where Sculptured runs it | On the runner, on the computer that holds the logs. Only the report leaves it. |
 
@@ -92,9 +92,9 @@ Run ── agents ── calls ── context items
 
 ## What it writes
 
-- **`mais report <logs…> [--team team.madl] [--run run.sculptured-session.jsonl] --out report.html`**:
-  one self-contained HTML file. No network and no server; it opens in a browser. It shows the figures,
-  charts and tables of the C172 investigation, built from the JSON below.
+MAIS produces data only: no charts, pages or other visuals. Showing the report is the job of
+the application that reads it (in Sculptured, the run's "Where tokens went" view).
+
 - **`mais json …`**: the report as JSON (`mais.report/v1`), with a published JSON Schema. Sculptured
   and other tools read this.
 - **Selection**: `--since`, `--until`, `--folder`, `--session`; the default is the newest run found

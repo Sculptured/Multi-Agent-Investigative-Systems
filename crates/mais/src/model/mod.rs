@@ -30,6 +30,12 @@ pub struct Figure<T> {
     pub provenance: Provenance,
 }
 
+impl<T> Default for Figure<T> {
+    fn default() -> Self {
+        Self::unknown()
+    }
+}
+
 impl<T> Figure<T> {
     pub fn measured(v: T) -> Self {
         Self { value: Some(v), provenance: Provenance::Measured }

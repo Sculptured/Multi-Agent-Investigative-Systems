@@ -70,7 +70,7 @@ pub fn short_tool(name: &str) -> String {
 }
 
 /// Milliseconds since the Unix epoch from an RFC 3339 time.
-pub(crate) fn ms(ts: &str) -> Option<i64> {
+pub fn ms(ts: &str) -> Option<i64> {
     chrono::DateTime::parse_from_rfc3339(ts).ok().map(|t| t.timestamp_millis())
 }
 

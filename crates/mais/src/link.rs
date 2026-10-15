@@ -83,18 +83,21 @@ pub fn window(sessions: &[Session], sel: &Selection, export: Option<&RunExport>)
     (start, end)
 }
 
-/// The team member a session ran, from the export, else from "Your role: … [member]" in its first message.
-fn member_of(s: &Session, export: Option<&RunExport>) -> Option<String> {
+/// The team member a session ran, from the export, else from "Your role: Name [member]" in its
+/// first message (which also gives a name).
+fn member_of(s: &Session, export: Option<&RunExport>) -> Option<(String, Option<String>)> {
     let a = s.agent.as_ref()?;
-    let session = a.session.as_str();
-    if a.parent.is_none()
-        && let Some(m) = export.and_then(|x| x.sessions.get(session))
-    {
-        return Some(m.clone());
+    if a.parent.is_some() {
+        return None;
+    }
+    if let Some(m) = export.and_then(|x| x.sessions.get(a.session.as_str())) {
+        return Some((m.clone(), None));
     }
     let line = s.first_message.lines().find(|l| l.contains("Your role:"))?;
-    let id = line.rsplit_once('[')?.1.split(']').next()?;
-    (!id.is_empty() && a.parent.is_none()).then(|| id.to_string())
+    let (before, after) = line.rsplit_once('[')?;
+    let id = after.split(']').next()?;
+    let name = before.split("Your role:").nth(1).map(|n| n.trim().to_string()).filter(|n| !n.is_empty());
+    (!id.is_empty()).then(|| (id.to_string(), name))
 }
 
 /// One run from `sessions`, named and grouped by `team`, linked by `export`.
@@ -103,7 +106,9 @@ pub fn assemble(sessions: Vec<Session>, team: Option<&Team>, export: Option<&Run
     let keep = |s: &Session| s.calls.iter().any(|c| c.at_ms >= from && c.at_ms <= to);
     let wanted = |s: &Session| sel.sessions.is_empty() || s.agent.as_ref().is_some_and(|a| sel.sessions.iter().any(|p| a.session.starts_with(p)));
     let sessions: Vec<Session> = sessions.into_iter().filter(|s| keep(s) && wanted(s)).collect();
-    let rename: BTreeMap<String, String> = sessions.iter().filter_map(|s| Some((s.agent.as_ref()?.id.clone(), member_of(s, export)?))).collect();
+    let found: BTreeMap<String, (String, Option<String>)> = sessions.iter().filter_map(|s| Some((s.agent.as_ref()?.id.clone(), member_of(s, export)?))).collect();
+    let rename: BTreeMap<String, String> = found.iter().map(|(k, (m, _))| (k.clone(), m.clone())).collect();
+    let names: BTreeMap<String, String> = found.into_values().filter_map(|(m, n)| Some((m, n?))).collect();
     let id_of = |old: &str| -> String {
         match old.split_once('/') {
             Some((main, sub)) => format!("{}/{sub}", rename.get(main).map_or(main, String::as_str)),
@@ -113,6 +118,13 @@ pub fn assemble(sessions: Vec<Session>, team: Option<&Team>, export: Option<&Run
     let mut run = Run { name: team.and_then(|t| t.name.clone()), ..Default::default() };
     for s in sessions {
         add(&mut run, s, &id_of, team, (from, to));
+    }
+    for a in &mut run.agents {
+        if team.and_then(|t| t.member(&a.id)).is_none()
+            && let Some(n) = names.get(&a.id)
+        {
+            a.name.clone_from(n);
+        }
     }
     finish(&mut run, team, export);
     run

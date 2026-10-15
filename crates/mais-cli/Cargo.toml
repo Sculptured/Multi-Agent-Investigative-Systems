@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 mais.workspace = true
+madl.workspace = true
 serde_json.workspace = true
 clap.workspace = true
 

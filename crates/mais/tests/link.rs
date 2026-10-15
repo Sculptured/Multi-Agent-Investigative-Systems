@@ -27,8 +27,7 @@ fn a_session_names_its_member_and_the_team_names_and_groups_it() {
 fn a_run_export_links_sessions_and_brings_plan_readings_and_handoffs() {
     let x = sculptured::read(&std::fs::read_to_string(fx("team/run.sculptured-session.jsonl")).unwrap()).unwrap();
     let (sessions, _) = read_logs(&[fx("codex")]);
-    let mut sel = Selection::default();
-    sel.since_ms = Some(0);
+    let sel = Selection { since_ms: Some(0), ..Default::default() };
     // The export's window is the run; the fixture's Codex calls are from another day, so widen it.
     let x2 = sculptured::RunExport { started_ms: 0, ended_ms: None, ..x.clone() };
     let run = assemble(sessions, Some(&x.team), Some(&x2), &sel);
