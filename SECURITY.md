@@ -12,5 +12,7 @@ redaction that leaves a command, path or message text in a report.
 ## Logs and reports
 
 Session logs hold prompts, code, file paths and command output. MAIS reads them locally and sends
-nothing anywhere. A report holds commands and file names unless it is made with `--redact`; redact
-a report before sharing it outside your team.
+nothing anywhere. A report holds command lines and file names unless it is made with `--redact`; redact
+a report before sharing it outside your team. Passwords, tokens and keys that appear in command lines
+are masked, and a patch is named by the files it touches, never its text. Masking catches common
+forms only.

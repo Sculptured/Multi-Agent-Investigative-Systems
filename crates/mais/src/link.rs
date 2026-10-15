@@ -26,7 +26,9 @@ pub fn read_logs(paths: &[PathBuf]) -> (Vec<Session>, BTreeMap<String, u64>) {
         let Ok(sessions) = read else { continue };
         let n: u64 = sessions.iter().map(|s| s.skipped).sum();
         if n > 0 {
-            skipped.insert(f.display().to_string(), n);
+            // The file's name, not its path: the path names the person's folders.
+            skipped
+                .insert(f.file_name().map_or_else(|| f.display().to_string(), |n| n.to_string_lossy().into_owned()), n);
         }
         out.extend(sessions);
     }

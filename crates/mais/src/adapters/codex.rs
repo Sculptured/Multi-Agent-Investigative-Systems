@@ -119,7 +119,11 @@ impl State {
     fn item(&mut self, p: &Value) {
         match p["type"].as_str().unwrap_or("") {
             "message" => self.message(p),
-            "custom_tool_call" => self.call(p, p["input"].as_str().map(exec_target)),
+            "custom_tool_call" => {
+                let input = p["input"].as_str();
+                let target = if p["name"] == "apply_patch" { input.map(patch_files) } else { input.map(exec_target) };
+                self.call(p, target);
+            }
             "function_call" => {
                 let args: Value =
                     p["arguments"].as_str().and_then(|a| serde_json::from_str(a).ok()).unwrap_or_default();
@@ -207,5 +211,12 @@ fn exec_target(script: &str) -> String {
         Some(i) => script[i + 5..].split('"').next().unwrap_or_default(),
         None => script,
     };
-    s.chars().take(400).collect()
+    super::scrub(&s.chars().take(400).collect::<String>())
+}
+
+/// The files a patch touches (never its text, which can hold file contents and secrets).
+fn patch_files(patch: &str) -> String {
+    const HEADS: [&str; 3] = ["*** Update File: ", "*** Add File: ", "*** Delete File: "];
+    let files = patch.lines().filter_map(|l| HEADS.iter().find_map(|h| l.strip_prefix(h)));
+    files.map(str::trim).collect::<Vec<_>>().join(", ")
 }

@@ -18,6 +18,7 @@ schemars = "1"
 thiserror = "2"
 clap = { version = "4", features = ["derive"] }
 proptest = "1"
+regex = "1"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 
 [workspace.lints.clippy]

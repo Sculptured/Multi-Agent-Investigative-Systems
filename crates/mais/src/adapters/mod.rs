@@ -98,5 +98,31 @@ pub(crate) fn target_of(input: &serde_json::Value) -> Option<String> {
     ["command", "cmd", "file_path", "path", "pattern", "query", "url"]
         .iter()
         .find_map(|k| input[*k].as_str())
-        .map(|s| s.chars().take(400).collect())
+        .map(|s| scrub(&s.chars().take(400).collect::<String>()))
+}
+
+/// Patterns of secrets in command lines, and what each becomes.
+fn secrets() -> &'static [(regex::Regex, &'static str)] {
+    static SECRETS: std::sync::OnceLock<Vec<(regex::Regex, &'static str)>> = std::sync::OnceLock::new();
+    SECRETS.get_or_init(|| {
+        [
+            (r"(?i)\b(authorization:\s*(?:bearer|basic|token)\s+)[^\s'\x22]+", "${1}***"),
+            (r"(?i)\b((?:x-)?api-key:\s*)[^\s'\x22]+", "${1}***"),
+            (r"(?i)\b([A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|PWD)[A-Z0-9_]*=)[^\s'\x22]+", "${1}***"),
+            (r"(?i)(--(?:password|passwd|token|api-key|secret)[= ])[^\s'\x22]+", "${1}***"),
+            (r"://[^/\s:@]+:[^@\s/]+@", "://***@"),
+            (
+                r"\b(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[abpr]-[A-Za-z0-9-]{10,})",
+                "***",
+            ),
+        ]
+        .into_iter()
+        .map(|(p, r)| (regex::Regex::new(p).expect("a valid pattern"), r))
+        .collect()
+    })
+}
+
+/// A command line with passwords, tokens and keys masked.
+pub fn scrub(text: &str) -> String {
+    secrets().iter().fold(text.to_string(), |t, (re, with)| re.replace_all(&t, *with).into_owned())
 }
