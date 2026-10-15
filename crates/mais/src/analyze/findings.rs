@@ -98,12 +98,21 @@ fn plan(p: &crate::report::PlanSeries) -> Option<Finding> {
     let added = p.added.value.filter(|a| *a > 0.0)?;
     let per =
         p.points_per_million.value.map(|v| format!(", about {v:.1} points per million tokens")).unwrap_or_default();
-    let window = p.window.replace('_', "-");
+    let window = match p.window.as_str() {
+        "five_hour" => "5-hour".to_string(),
+        "seven_day" => "7-day".to_string(),
+        w => w.replace('_', " "),
+    };
+    let provider = match p.provider.as_str() {
+        "claude" => "Claude".to_string(),
+        "codex" => "Codex".to_string(),
+        other => other.to_string(),
+    };
     found(
         "plan",
         format!(
-            "The run added {added:.0} points to the {} {window} window ({:.0}% → {:.0}%){per}.",
-            p.provider, p.first, p.highest
+            "The run added {added:.0} points to the {provider} {window} window ({:.0}% → {:.0}%){per}.",
+            p.first, p.highest
         ),
     )
 }

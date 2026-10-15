@@ -154,3 +154,17 @@ fn a_fan_out_finding_names_the_agent_not_its_id() {
         r.findings
     );
 }
+
+#[test]
+fn the_plan_finding_names_the_window_as_people_do() {
+    let mut run = Run { agents: vec![agent("a")], calls: vec![call("a", 0, 0, 1_000_000, 0)], ..Default::default() };
+    run.readings = vec![reading("claude", 18.0, 5_000, 1_000), reading("claude", 48.0, 5_000, 2_000)];
+    let r = analyze(&run);
+    assert!(
+        r.findings
+            .iter()
+            .any(|f| f.text.starts_with("The run added 30 points to the Claude 5-hour window (18% → 48%)")),
+        "{:?}",
+        r.findings
+    );
+}
