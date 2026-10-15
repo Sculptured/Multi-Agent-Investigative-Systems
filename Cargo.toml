@@ -1,0 +1,25 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+edition = "2024"
+version = "0.1.0"
+license = "Apache-2.0"
+rust-version = "1.85"
+
+[workspace.dependencies]
+mais = { path = "crates/mais" }
+madl = { git = "https://github.com/Alexander-Aghili/Multi-Agent-Descriptor-Language", rev = "ea9c2dd849ab41367b0cccbba86d613dadcf276d" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+schemars = "1"
+thiserror = "2"
+clap = { version = "4", features = ["derive"] }
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+
+[workspace.lints.clippy]
+too_many_lines = "warn"
+
+[profile.dev]
+debug = "line-tables-only"

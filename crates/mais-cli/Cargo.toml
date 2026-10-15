@@ -1,0 +1,19 @@
+[package]
+name = "mais-cli"
+description = "The mais command: report where a multi-agent run's tokens and context went"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "mais"
+path = "src/main.rs"
+
+[dependencies]
+mais.workspace = true
+serde_json.workspace = true
+clap.workspace = true
+
+[lints]
+workspace = true
