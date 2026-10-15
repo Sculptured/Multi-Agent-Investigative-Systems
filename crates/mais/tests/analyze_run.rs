@@ -96,3 +96,14 @@ proptest! {
         prop_assert_eq!(r.where_tokens_went.iter().find(|p| p.group == "output").unwrap().tokens, output);
     }
 }
+
+#[test]
+fn a_fan_out_finding_names_the_agent_not_its_id() {
+    let ids = ["lead", "d1", "d2", "d3", "d4", "d5"];
+    let mut run = Run { agents: ids.iter().map(|i| agent(i)).collect(), ..Default::default() };
+    run.agents[0].name = "Integration Manager".into();
+    run.calls = ids.iter().enumerate().map(|(k, i)| call(i, 0, k as i64 * 10_000, 10, 1)).collect();
+    run.edges = ids[1..].iter().map(|i| Edge { from: "lead".into(), to: (*i).into(), kind: EdgeKind::HandsWorkTo, at_ms: Some(1) }).collect();
+    let r = analyze(&run);
+    assert!(r.findings.iter().any(|f| f.text.contains("after Integration Manager handed out work")), "{:?}", r.findings);
+}

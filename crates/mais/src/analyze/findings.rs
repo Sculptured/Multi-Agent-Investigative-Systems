@@ -31,7 +31,8 @@ pub fn findings(r: &Report) -> Vec<Finding> {
         say(&mut out, "where_tokens_went", format!("The largest cause of growth was {}: {} of all tokens, re-read on every later call.", g.part.to_lowercase(), pct(g.tokens as f64 / total)));
     }
     if let Some(f) = r.timeline.fanouts.iter().max_by_key(|f| f.agents) {
-        let by = f.from.as_deref().map(|a| format!(" after {a} handed out work")).unwrap_or_default();
+        let name = |id: &str| r.agents.iter().find(|a| a.id == id).map_or(id.to_string(), |a| a.name.clone());
+        let by = f.from.as_deref().map(|a| format!(" after {} handed out work", name(a))).unwrap_or_default();
         say(&mut out, "timeline", format!("{} agents started within two minutes{by}; up to {} worked at once.", f.agents, r.run.most_working));
     }
     if let Some(s) = r.shared_reads.first().filter(|s| s.agents >= 3) {
