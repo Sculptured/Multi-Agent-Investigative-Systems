@@ -13,8 +13,8 @@ fn firsts(run: &Run) -> BTreeMap<&str, u32> {
     run.agents.iter().filter_map(|a| Some((a.id.as_str(), run.calls_of(&a.id).map(|c| c.seq).min()?))).collect()
 }
 
-/// Start items present, identical, in at least two agents.
-fn parts(items: &[Sized], firsts: &BTreeMap<&str, u32>) -> Vec<SharedPart> {
+/// Start items by content, with the agents that had them and their sizes.
+fn copies<'a>(items: &'a [Sized], firsts: &BTreeMap<&str, u32>) -> BTreeMap<(ItemKind, u64), Copies<'a>> {
     let mut by_print: BTreeMap<(ItemKind, u64), Copies> = BTreeMap::new();
     for s in items.iter().filter(|s| firsts.get(s.agent.as_str()) == Some(&s.first_call)) {
         let Some(fp) = s.fingerprint else { continue };
@@ -22,34 +22,64 @@ fn parts(items: &[Sized], firsts: &BTreeMap<&str, u32>) -> Vec<SharedPart> {
         e.1.insert(&s.agent);
         e.2.push(s.tokens);
     }
-    let shared = by_print.into_iter().filter(|(_, (_, a, _))| a.len() >= 2);
+    by_print.retain(|_, (_, agents, _)| agents.len() >= 2);
+    by_print
+}
+
+/// Start items present, identical, in at least two agents.
+fn parts(shared: &BTreeMap<(ItemKind, u64), Copies>) -> Vec<SharedPart> {
     let mut parts: Vec<SharedPart> = shared
+        .iter()
         .map(|((kind, _), (label, agents, sizes))| {
             let mean = sizes.iter().sum::<u64>() / sizes.len() as u64;
-            SharedPart { kind, label, agents: agents.len() as u32, tokens: Figure::estimated(mean) }
+            SharedPart {
+                kind: *kind,
+                label: label.clone(),
+                agents: agents.len() as u32,
+                tokens: Figure::estimated(mean),
+            }
         })
         .collect();
     parts.sort_by_key(|p| std::cmp::Reverse(p.tokens.value));
     parts
 }
 
+/// Each agent's tokens of start that other agents had too.
+fn shared_by_agent<'a>(
+    items: &'a [Sized],
+    firsts: &BTreeMap<&str, u32>,
+    shared: &BTreeMap<(ItemKind, u64), Copies>,
+) -> BTreeMap<&'a str, u64> {
+    let mut out = BTreeMap::new();
+    for s in items.iter().filter(|s| firsts.get(s.agent.as_str()) == Some(&s.first_call)) {
+        if s.fingerprint.is_some_and(|fp| shared.contains_key(&(s.kind, fp))) {
+            *out.entry(s.agent.as_str()).or_default() += s.tokens;
+        }
+    }
+    out
+}
+
+/// What the agents had in common at their start, and the first calls' cache writes that could have been
+/// reads: the least they could have written is each shared part once and every agent's own rest.
 pub fn shared_start(run: &Run, items: &[Sized]) -> SharedStart {
     let firsts = firsts(run);
-    let parts = parts(items, &firsts);
-    let agents = parts.iter().map(|p| p.agents).max().unwrap_or(0);
-    let per_agent: u64 = parts.iter().filter_map(|p| p.tokens.value).sum();
+    let shared = copies(items, &firsts);
+    let mine = shared_by_agent(items, &firsts, &shared);
+    let parts = parts(&shared);
     let first_calls: Vec<&crate::model::Call> =
         firsts.iter().filter_map(|(a, s)| run.calls_of(a).find(|c| c.seq == *s)).collect();
     let writes: u64 = first_calls.iter().map(|c| c.usage.cache_write).sum();
-    // The least the first calls could have written: the identical part once, and each agent's own rest.
-    let shared = if agents > 1 { per_agent } else { 0 };
-    let own: u64 = first_calls.iter().map(|c| c.usage.context().saturating_sub(shared)).sum();
+    let own: u64 = first_calls
+        .iter()
+        .map(|c| c.usage.context().saturating_sub(mine.get(c.agent.as_str()).copied().unwrap_or(0)))
+        .sum();
+    let once: u64 = parts.iter().filter_map(|p| p.tokens.value).sum();
     SharedStart {
-        agents,
+        agents: parts.iter().map(|p| p.agents).max().unwrap_or(0),
         parts,
-        identical_per_agent: Figure::estimated(per_agent),
+        identical_per_agent: Figure::estimated(mine.values().copied().max().unwrap_or(0)),
         first_call_cache_writes: writes,
-        writes_avoidable: Figure::estimated(writes.saturating_sub(own + shared)),
+        writes_avoidable: Figure::estimated(writes.saturating_sub(own + once)),
     }
 }
 

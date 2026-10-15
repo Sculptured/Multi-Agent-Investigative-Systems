@@ -42,6 +42,9 @@ fn shell(target: &str) -> &'static str {
 /// The cause an item belongs to.
 pub fn cause(s: &Sized) -> String {
     match s.kind {
+        ItemKind::SystemPrompt if s.label == super::tokens::UNRECORDED_START => {
+            "Starting context the CLI's log does not break down".into()
+        }
         ItemKind::SystemPrompt => "The CLI's system prompt and notes".into(),
         ItemKind::ToolDefinitions => "Tool definitions".into(),
         ItemKind::Setup => "Your own CLI setup (skills list, plugins, hooks)".into(),

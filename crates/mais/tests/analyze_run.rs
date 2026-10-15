@@ -31,7 +31,7 @@ fn an_identical_start_written_by_every_agent_could_have_been_written_once() {
         ..Default::default()
     };
     for a in ["a", "b"] {
-        run.items.push(ContextItem { fingerprint: Some(7), ..item(a, 0, ItemKind::Setup, 600) });
+        run.items.push(ContextItem { fingerprint: Some(7), ..item(a, 0, ItemKind::ToolDefinitions, 600) });
         run.items.push(ContextItem {
             fingerprint: Some(a.len() as u64 + u64::from(a.as_bytes()[0])),
             ..item(a, 0, ItemKind::Job, 400)
@@ -167,4 +167,26 @@ fn the_plan_finding_names_the_window_as_people_do() {
         "{:?}",
         r.findings
     );
+}
+
+#[test]
+fn two_groups_sharing_different_starts_each_could_have_written_theirs_once() {
+    let mut run = Run::default();
+    for (prefix, print, shared, own) in [("main", 1, 20_000, 10_000), ("sub", 2, 5_000, 3_000)] {
+        for n in 0..4 {
+            let id = format!("{prefix}{n}");
+            run.agents.push(agent(&id));
+            run.calls.push(call(&id, 0, 0, shared + own, 0));
+            run.items.push(ContextItem { fingerprint: Some(print), ..item(&id, 0, ItemKind::ToolDefinitions, shared) });
+            run.items.push(ContextItem { fingerprint: Some(100 + 10 * print + n), ..item(&id, 0, ItemKind::Job, own) });
+        }
+    }
+    let s = sharing::shared_start(&run, &tokens::size(&run));
+    assert_eq!(s.first_call_cache_writes, 152_000);
+    assert_eq!(
+        s.writes_avoidable.value,
+        Some(3 * 20_000 + 3 * 5_000),
+        "each group's shared part written once, not every agent's"
+    );
+    assert_eq!(s.identical_per_agent.value, Some(20_000), "the most any agent shared");
 }

@@ -118,14 +118,20 @@
     },
     {
       "group": "start",
-      "part": "The agent's job and team description",
-      "tokens": 15747,
+      "part": "Memory files (CLAUDE.md, AGENTS.md)",
+      "tokens": 13050,
       "provenance": "estimated"
     },
     {
       "group": "start",
-      "part": "Memory files (CLAUDE.md, AGENTS.md)",
-      "tokens": 13050,
+      "part": "Starting context the CLI's log does not break down",
+      "tokens": 8005,
+      "provenance": "measured"
+    },
+    {
+      "group": "start",
+      "part": "The agent's job and team description",
+      "tokens": 7742,
       "provenance": "estimated"
     },
     {
@@ -216,17 +222,17 @@
     },
     {
       "agent": "dev8/ax1",
-      "kind": "job",
-      "cause": "The agent's job and team description",
+      "kind": "system-prompt",
+      "cause": "Starting context the CLI's log does not break down",
       "tool": null,
       "target": null,
       "tokens": {
         "value": 8005,
-        "provenance": "estimated"
+        "provenance": "measured"
       },
       "reread": {
         "value": 8005,
-        "provenance": "estimated"
+        "provenance": "measured"
       }
     },
     {
@@ -403,6 +409,10 @@
   "findings": [
     {
       "text": "97% of all tokens were agents re-reading their starting context on every call.",
+      "section": "where_tokens_went"
+    },
+    {
+      "text": "6% of all tokens were starting context whose parts the CLI's log does not record (Claude Code before 2.1.300, or Codex), so it is not split into setup, tools and job.",
       "section": "where_tokens_went"
     },
     {

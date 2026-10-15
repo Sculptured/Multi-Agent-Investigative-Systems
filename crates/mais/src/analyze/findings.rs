@@ -34,6 +34,18 @@ fn start(r: &Report) -> Option<Finding> {
     if start > 0 { found("where_tokens_went", text) } else { None }
 }
 
+fn unrecorded(r: &Report) -> Option<Finding> {
+    let p = r.where_tokens_went.iter().find(|p| p.part.starts_with("Starting context the CLI's log"))?;
+    found(
+        "where_tokens_went",
+        format!(
+            "{} of all tokens were starting context whose parts the CLI's log does not record (Claude Code \
+             before 2.1.300, or Codex), so it is not split into setup, tools and job.",
+            share(p.tokens, r.run.tokens)
+        ),
+    )
+}
+
 fn setup(r: &Report) -> Option<Finding> {
     let setup = r.where_tokens_went.iter().find(|p| p.part.starts_with("Your own CLI setup"))?;
     let (of_start, of_all) = (share(setup.tokens, start_tokens(r)), share(setup.tokens, r.run.tokens));
@@ -133,7 +145,8 @@ fn latency(r: &Report) -> Option<Finding> {
 }
 
 pub fn findings(r: &Report) -> Vec<Finding> {
-    let first = [start(r), setup(r), growth(r), fanout(r), shared_read(r), shared_start(r), unused_tools(r)];
+    let first =
+        [start(r), unrecorded(r), setup(r), growth(r), fanout(r), shared_read(r), shared_start(r), unused_tools(r)];
     let plans = r.plan.iter().map(plan);
     first.into_iter().chain(plans).chain([latency(r)]).flatten().collect()
 }

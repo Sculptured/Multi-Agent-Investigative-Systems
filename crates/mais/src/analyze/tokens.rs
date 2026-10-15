@@ -57,7 +57,7 @@ fn agent(run: &Run, id: &str) -> Vec<Sized> {
         let here: Vec<&ContextItem> =
             items.iter().copied().filter(|i| i.first_call == *seq || (k == 0 && i.first_call < first.seq)).collect();
         if k == 0 {
-            out.extend(split(here, ctx[0], Provenance::Estimated));
+            out.extend(start(id, *seq, here, ctx[0]));
         } else if compactions.contains(seq) {
             let kept: u64 = out.iter().filter(|s: &&Sized| s.persistent()).map(|s| s.tokens).sum();
             out.push(synthetic(id, *seq, "summary after compaction", ctx[k].saturating_sub(kept)));
@@ -74,6 +74,23 @@ fn agent(run: &Run, id: &str) -> Vec<Sized> {
         s.sent = sent(s, &seqs, &compactions);
     }
     out
+}
+
+/// The label of a start whose parts the log does not record.
+pub const UNRECORDED_START: &str = "start not broken down";
+
+/// The first call's context split among its parts; when the log does not record the request (no tool
+/// definitions: Claude Code before 2.1.300, Codex), one measured part, since a split would be a guess.
+fn start(agent: &str, seq: u32, here: Vec<&ContextItem>, context: u64) -> Vec<Sized> {
+    if here.iter().any(|i| i.kind == ItemKind::ToolDefinitions) {
+        return split(here, context, Provenance::Estimated);
+    }
+    let whole = Sized {
+        kind: ItemKind::SystemPrompt,
+        provenance: Provenance::Measured,
+        ..synthetic(agent, seq, UNRECORDED_START, context)
+    };
+    vec![whole]
 }
 
 /// `total` tokens shared among `items` by characters.
