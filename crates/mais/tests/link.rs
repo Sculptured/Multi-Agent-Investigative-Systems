@@ -93,3 +93,56 @@ fn a_member_that_ran_two_sessions_gets_a_row_for_each() {
     assert_eq!(run.calls_of("dev8~2").count(), 2);
     assert_eq!(mais::analyze::analyze(&run).run.tokens, 4 * 106);
 }
+
+fn s1_item(first_call: u32, kind: ItemKind, chars: u64, label: &str) -> ContextItem {
+    let tokens = Figure::unknown();
+    ContextItem {
+        agent: "s1".into(),
+        first_call,
+        kind,
+        chars,
+        tokens,
+        label: label.into(),
+        tool: None,
+        target: None,
+        fingerprint: None,
+        took_ms: None,
+    }
+}
+
+/// A session with a compaction before call 2: tool definitions and a job, a large result, then a small one.
+fn compacted_session() -> mais::adapters::Session {
+    let mut s = session("s1", 0);
+    let usage = |context: u64| Usage { input: 0, cache_read: context, cache_write: 0, output: 10 };
+    s.calls = [(0, 10_000), (1, 50_000), (2, 12_000), (3, 15_000)]
+        .iter()
+        .map(|&(seq, ctx)| Call {
+            agent: "s1".into(),
+            seq,
+            at_ms: i64::from(seq) * 1_000,
+            model: None,
+            usage: usage(ctx),
+            started_ms: None,
+            ended_ms: None,
+        })
+        .collect();
+    s.items = vec![
+        s1_item(0, ItemKind::ToolDefinitions, 4_000, "tools"),
+        s1_item(0, ItemKind::Job, 6_000, "job"),
+        s1_item(1, ItemKind::ToolResult, 40_000, "result"),
+        s1_item(3, ItemKind::ToolResult, 3_000, "result"),
+    ];
+    s.compactions = vec![2];
+    s
+}
+
+#[test]
+fn a_session_resumed_into_a_run_after_a_compaction_still_accounts_for_every_token() {
+    let s = compacted_session();
+    // The run starts at call 2, after the compaction (a session resumed into a new run).
+    let run = assemble(vec![s], None, None, &Selection { since_ms: Some(1_500), ..Default::default() });
+    let r = mais::analyze::analyze(&run);
+    let parts: u64 = r.where_tokens_went.iter().map(|p| p.tokens).sum();
+    assert_eq!(r.run.tokens, 12_010 + 15_010);
+    assert!(parts.abs_diff(r.run.tokens) <= 10, "every token has a cause: {parts} of {}", r.run.tokens);
+}

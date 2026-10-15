@@ -34,7 +34,7 @@ impl Sized {
 
     /// Part of the start that stays in context through a compaction.
     pub fn persistent(&self) -> bool {
-        matches!(self.kind, ItemKind::SystemPrompt | ItemKind::ToolDefinitions | ItemKind::Setup | ItemKind::Memory)
+        persistent(self.kind)
     }
 }
 
@@ -51,13 +51,14 @@ fn agent(run: &Run, id: &str) -> Vec<Sized> {
     let ctx: Vec<u64> = calls.iter().map(|c| c.usage.context()).collect();
     let seqs: Vec<u32> = calls.iter().map(|c| c.seq).collect();
     let compactions: Vec<u32> = run.compactions.iter().filter(|(a, _)| a == id).map(|(_, c)| *c).collect();
-    let items: Vec<&ContextItem> = run.items.iter().filter(|i| i.agent == id).collect();
+    let items = in_context(run, id, first.seq, &compactions);
     let mut out = Vec::new();
     for (k, seq) in seqs.iter().enumerate() {
         let here: Vec<&ContextItem> =
             items.iter().copied().filter(|i| i.first_call == *seq || (k == 0 && i.first_call < first.seq)).collect();
         if k == 0 {
-            out.extend(start(id, *seq, here, ctx[0]));
+            // Items from before the run's first call count from it.
+            out.extend(start(id, *seq, here, ctx[0]).into_iter().map(|s| Sized { first_call: *seq, ..s }));
         } else if compactions.contains(seq) {
             let kept: u64 = out.iter().filter(|s: &&Sized| s.persistent()).map(|s| s.tokens).sum();
             out.push(synthetic(id, *seq, "summary after compaction", ctx[k].saturating_sub(kept)));
@@ -74,6 +75,19 @@ fn agent(run: &Run, id: &str) -> Vec<Sized> {
         s.sent = sent(s, &seqs, &compactions);
     }
     out
+}
+
+fn persistent(kind: ItemKind) -> bool {
+    matches!(kind, ItemKind::SystemPrompt | ItemKind::ToolDefinitions | ItemKind::Setup | ItemKind::Memory)
+}
+
+/// The agent's items, less those a compaction before its first call (in this run) had already replaced:
+/// a session resumed into a run starts from its summary, not its whole history.
+fn in_context<'a>(run: &'a Run, id: &str, first: u32, compactions: &[u32]) -> Vec<&'a ContextItem> {
+    let gone = |i: &ContextItem| {
+        i.first_call < first && !persistent(i.kind) && compactions.iter().any(|c| *c > i.first_call && *c <= first)
+    };
+    run.items.iter().filter(|i| i.agent == id && !gone(i)).collect()
 }
 
 /// The label of a start whose parts the log does not record.
