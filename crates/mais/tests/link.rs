@@ -47,3 +47,49 @@ fn the_newest_run_is_picked_when_nothing_says_which() {
         "the Codex fixture is a day older: another run"
     );
 }
+
+fn session(id: &str, at_ms: i64) -> mais::adapters::Session {
+    let agent = Agent {
+        id: id.into(),
+        name: id.into(),
+        group: None,
+        role: None,
+        runtime: Runtime::ClaudeCode,
+        session: id.into(),
+        parent: None,
+        folder: None,
+        cli_cost_usd: None,
+    };
+    let usage = Usage { input: 1, cache_read: 0, cache_write: 100, output: 5 };
+    let calls = (0..2)
+        .map(|seq| Call {
+            agent: id.into(),
+            seq,
+            at_ms: at_ms + i64::from(seq),
+            model: None,
+            usage,
+            started_ms: None,
+            ended_ms: None,
+        })
+        .collect();
+    mais::adapters::Session {
+        agent: Some(agent),
+        calls,
+        first_message: "Your role: Developer 8 [dev8]".into(),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn a_member_that_ran_two_sessions_gets_a_row_for_each() {
+    let run = assemble(
+        vec![session("s1", 1_000), session("s2", 5_000)],
+        None,
+        None,
+        &Selection { since_ms: Some(0), ..Default::default() },
+    );
+    let ids: Vec<(&str, &str)> = run.agents.iter().map(|a| (a.id.as_str(), a.name.as_str())).collect();
+    assert_eq!(ids, [("dev8", "Developer 8"), ("dev8~2", "Developer 8 (session 2)")]);
+    assert_eq!(run.calls_of("dev8~2").count(), 2);
+    assert_eq!(mais::analyze::analyze(&run).run.tokens, 4 * 106);
+}

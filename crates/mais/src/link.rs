@@ -104,6 +104,31 @@ fn member_of(s: &Session, export: Option<&RunExport>) -> Option<(String, Option<
     (!id.is_empty()).then(|| (id.to_string(), name))
 }
 
+/// Each session's agent id in the run: its member, `member~2` for the member's second session and so
+/// on in time order; and the names the sessions gave their members.
+fn members(
+    sessions: &mut [Session],
+    export: Option<&RunExport>,
+) -> (BTreeMap<String, String>, BTreeMap<String, String>) {
+    sessions.sort_by_key(|s| s.calls.iter().map(|c| c.at_ms).min());
+    let (mut rename, mut names, mut count) = (BTreeMap::new(), BTreeMap::new(), BTreeMap::<String, u32>::new());
+    for s in sessions.iter() {
+        let (Some(a), Some((m, name))) = (s.agent.as_ref(), member_of(s, export)) else { continue };
+        let n = count.entry(m.clone()).or_default();
+        *n += 1;
+        rename.insert(a.id.clone(), if *n == 1 { m.clone() } else { format!("{m}~{n}") });
+        if let Some(name) = name {
+            names.insert(m, name);
+        }
+    }
+    (rename, names)
+}
+
+/// A member's run id without its session number, and the number (2 and up).
+fn session_of(id: &str) -> (&str, Option<&str>) {
+    id.split_once('~').map_or((id, None), |(m, n)| (m, Some(n)))
+}
+
 /// One run from `sessions`, named and grouped by `team`, linked by `export`.
 pub fn assemble(sessions: Vec<Session>, team: Option<&Team>, export: Option<&RunExport>, sel: &Selection) -> Run {
     let (from, to) = window(&sessions, sel, export);
@@ -112,11 +137,8 @@ pub fn assemble(sessions: Vec<Session>, team: Option<&Team>, export: Option<&Run
         sel.sessions.is_empty()
             || s.agent.as_ref().is_some_and(|a| sel.sessions.iter().any(|p| a.session.starts_with(p)))
     };
-    let sessions: Vec<Session> = sessions.into_iter().filter(|s| keep(s) && wanted(s)).collect();
-    let found: BTreeMap<String, (String, Option<String>)> =
-        sessions.iter().filter_map(|s| Some((s.agent.as_ref()?.id.clone(), member_of(s, export)?))).collect();
-    let rename: BTreeMap<String, String> = found.iter().map(|(k, (m, _))| (k.clone(), m.clone())).collect();
-    let names: BTreeMap<String, String> = found.into_values().filter_map(|(m, n)| Some((m, n?))).collect();
+    let mut sessions: Vec<Session> = sessions.into_iter().filter(|s| keep(s) && wanted(s)).collect();
+    let (rename, names) = members(&mut sessions, export);
     let id_of = |old: &str| -> String {
         match old.split_once('/') {
             Some((main, sub)) => format!("{}/{sub}", rename.get(main).map_or(main, String::as_str)),
@@ -127,15 +149,23 @@ pub fn assemble(sessions: Vec<Session>, team: Option<&Team>, export: Option<&Run
     for s in sessions {
         add(&mut run, s, &id_of, team, (from, to));
     }
-    for a in &mut run.agents {
-        if team.and_then(|t| t.member(&a.id)).is_none()
-            && let Some(n) = names.get(&a.id)
-        {
-            a.name.clone_from(n);
-        }
-    }
+    name_sessions(&mut run, team, &names);
     finish(&mut run, team, export);
     run
+}
+
+fn name_sessions(run: &mut Run, team: Option<&Team>, names: &BTreeMap<String, String>) {
+    for a in run.agents.iter_mut().filter(|a| a.parent.is_none()) {
+        let (member, n) = session_of(&a.id);
+        if team.and_then(|t| t.member(member)).is_none()
+            && let Some(name) = names.get(member)
+        {
+            a.name.clone_from(name);
+        }
+        if let Some(n) = n {
+            a.name = format!("{} (session {n})", a.name);
+        }
+    }
 }
 
 fn add(run: &mut Run, s: Session, id_of: &dyn Fn(&str) -> String, team: Option<&Team>, (from, to): (i64, i64)) {
@@ -168,7 +198,7 @@ fn add(run: &mut Run, s: Session, id_of: &dyn Fn(&str) -> String, team: Option<&
 
 /// The session's agent under its run id, named and grouped by the team.
 fn named(a: Agent, id: &str, id_of: &dyn Fn(&str) -> String, team: Option<&Team>) -> Agent {
-    let member = team.and_then(|t| t.member(id));
+    let member = team.and_then(|t| t.member(session_of(id).0));
     Agent {
         name: member.map_or(a.name.clone(), |m| m.name.clone()),
         group: member.and_then(|m| m.group.clone()),
