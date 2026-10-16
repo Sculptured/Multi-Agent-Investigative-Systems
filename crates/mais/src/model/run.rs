@@ -109,6 +109,10 @@ pub struct PlanReading {
 pub enum BudgetEventKind {
     WrapUp,
     Stop,
+    /// Stopped at a plan budget until the window resets.
+    Pause,
+    /// Continued after a pause.
+    Continue,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]

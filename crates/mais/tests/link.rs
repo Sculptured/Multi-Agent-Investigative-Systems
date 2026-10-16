@@ -146,3 +146,21 @@ fn a_session_resumed_into_a_run_after_a_compaction_still_accounts_for_every_toke
     assert_eq!(r.run.tokens, 12_010 + 15_010);
     assert!(parts.abs_diff(r.run.tokens) <= 10, "every token has a cause: {parts} of {}", r.run.tokens);
 }
+
+#[test]
+fn a_run_export_says_when_the_budget_paused_and_continued_the_run() {
+    let head = r#"{"format":"sculptured.session/v1","source":"sculptured","team_id":"t","started_ms":0,"ended_ms":null,"agents":[],"tokens":{"input":0,"output":0,"cache_read":0,"cache_write":0},"team":null}"#;
+    let event = |state: &str, at: i64| {
+        format!(
+            r#"{{"origin":"observed","event":{{"seq":{at},"at_ms":{at},"subject":{{"kind":"rig","id":"t"}},"body":{{"type":"budget-state-changed","state":"{state}","reason":"r"}}}}}}"#
+        )
+    };
+    let text = [head.to_string(), event("wrap-up", 1), event("paused", 2), event("continued", 3), event("stopped", 4)]
+        .join("\n");
+    let x = sculptured::read(&text).unwrap();
+    let kinds: Vec<BudgetEventKind> = x.budget_events.iter().map(|e| e.kind).collect();
+    assert_eq!(
+        kinds,
+        [BudgetEventKind::WrapUp, BudgetEventKind::Pause, BudgetEventKind::Continue, BudgetEventKind::Stop]
+    );
+}

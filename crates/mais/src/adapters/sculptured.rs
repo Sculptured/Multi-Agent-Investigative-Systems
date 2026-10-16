@@ -49,6 +49,15 @@ pub fn read(text: &str) -> Result<RunExport, String> {
     Ok(x)
 }
 
+fn budget_kind(state: Option<&str>) -> BudgetEventKind {
+    match state {
+        Some("stopped") => BudgetEventKind::Stop,
+        Some("paused") => BudgetEventKind::Pause,
+        Some("continued") => BudgetEventKind::Continue,
+        _ => BudgetEventKind::WrapUp,
+    }
+}
+
 fn event(x: &mut RunExport, e: &Value) {
     let seat = e["subject"]["id"].as_str().unwrap_or_default();
     let at = e["at_ms"].as_i64().unwrap_or(0);
@@ -71,7 +80,7 @@ fn event(x: &mut RunExport, e: &Value) {
             }
         }
         "budget-state-changed" => {
-            let kind = if b["state"] == "stopped" { BudgetEventKind::Stop } else { BudgetEventKind::WrapUp };
+            let kind = budget_kind(b["state"].as_str());
             x.budget_events.push(BudgetEvent {
                 kind,
                 at_ms: at,

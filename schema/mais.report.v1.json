@@ -234,10 +234,24 @@
       ]
     },
     "BudgetEventKind": {
-      "type": "string",
-      "enum": [
-        "wrap-up",
-        "stop"
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "wrap-up",
+            "stop"
+          ]
+        },
+        {
+          "description": "Stopped at a plan budget until the window resets.",
+          "type": "string",
+          "const": "pause"
+        },
+        {
+          "description": "Continued after a pause.",
+          "type": "string",
+          "const": "continue"
+        }
       ]
     },
     "Cost": {
